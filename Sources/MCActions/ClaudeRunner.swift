@@ -76,7 +76,19 @@ public final class ClaudeRunner: @unchecked Sendable {
             at: Self.logsDirectory,
             withIntermediateDirectories: true
         )
-        Self.requestNotificationPermissionIfNeeded()
+        // UNUserNotificationCenter crashes hard ("bundleProxyForCurrentProcess
+        // is nil") when called outside a proper .app bundle — i.e. when
+        // running the bare CLI binary at .xcode-build/.../Release/MasterControl
+        // for development. Only wire notifications when we're packaged.
+        if Self.isInsideAppBundle() {
+            Self.requestNotificationPermissionIfNeeded()
+        } else {
+            NSLog("[MasterControl] running outside .app bundle — Claude task notifications disabled")
+        }
+    }
+
+    private static func isInsideAppBundle() -> Bool {
+        Bundle.main.bundleURL.pathExtension == "app"
     }
 
     public var isAvailable: Bool { claudeBinary != nil }
@@ -182,6 +194,11 @@ public final class ClaudeRunner: @unchecked Sendable {
         summary: String,
         logURL: URL
     ) {
+        // Notifications need a real .app bundle. Outside one, log instead.
+        guard isInsideAppBundle() else {
+            NSLog("[MasterControl] claude task \(taskID.uuidString.prefix(8)) finished (exit \(exitCode)). Log: \(logURL.path)")
+            return
+        }
         let content = UNMutableNotificationContent()
         if exitCode == 0 {
             content.title = "Claude finished"
