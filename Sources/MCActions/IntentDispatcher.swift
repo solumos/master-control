@@ -33,7 +33,11 @@ public actor IntentDispatcher {
         }
     }
 
-    public init() {}
+    private let installedApps: InstalledApps?
+
+    public init(installedApps: InstalledApps? = nil) {
+        self.installedApps = installedApps
+    }
 
     public func dispatch(_ intent: Intent) async -> Result {
         switch intent.intent {
@@ -59,10 +63,14 @@ public actor IntentDispatcher {
         guard let name = args["name"]?.stringValue, !name.isEmpty else {
             return Result(label: "open_app (missing name)", status: .failed("missing 'name' arg"))
         }
+        // Resolve against the installed-apps index so callers (LLM tool-use,
+        // STT slips like "claw" → "Claude", short forms like "Chrome" →
+        // "Google Chrome") all converge on the actual .app name.
+        let resolved = installedApps?.bestMatch(for: name) ?? name
         return await runProcess(
             executable: "/usr/bin/open",
-            arguments: ["-a", name],
-            label: "Open \(name)"
+            arguments: ["-a", resolved],
+            label: "Open \(resolved)"
         )
     }
 

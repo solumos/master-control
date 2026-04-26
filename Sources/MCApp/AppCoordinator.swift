@@ -94,7 +94,9 @@ final class AppCoordinator: ObservableObject {
             try await vad.warmLoad()
 
             state = .starting(progress: "Anthropic agent")
-            let dispatcher = IntentDispatcher()
+            let installedApps = InstalledApps.discover()
+            NSLog("[MasterControl] indexed \(installedApps.names.count) installed apps for fuzzy matching")
+            let dispatcher = IntentDispatcher(installedApps: installedApps)
             let dictator = Dictator()
             let responder: (any Responder)? = AnthropicAgent.fromEnvironment(
                 tools: ToolBridge.tools(),
@@ -117,8 +119,6 @@ final class AppCoordinator: ObservableObject {
                 NSLog("[MasterControl] Kokoro TTS failed to load (\(error.localizedDescription)); responses will be logged but not spoken.")
             }
 
-            let installedApps = InstalledApps.discover()
-            NSLog("[MasterControl] indexed \(installedApps.names.count) installed apps for fuzzy matching")
             let chain = RouterChain([DeterministicRouter(installedApps: installedApps)])
             let wake = WakeWord()
             let audio = AudioFeedback()

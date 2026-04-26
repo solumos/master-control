@@ -37,8 +37,10 @@ public struct InstalledApps: Sendable {
     /// Best match for the heard name, or nil if nothing's close enough.
     /// Lookup priority:
     ///   1. exact (case-insensitive) name match
-    ///   2. one is a prefix of the other (≥ 3 characters)
-    ///   3. Levenshtein distance ≤ max(2, ceil(len/3))
+    ///   2. heard name matches any whole word in an installed name
+    ///      ("chrome" → "Google Chrome", "code" → "Visual Studio Code")
+    ///   3. one full name is a prefix of the other (≥ 3 characters)
+    ///   4. Levenshtein distance ≤ max(2, len/3)
     public func bestMatch(for heard: String) -> String? {
         guard !heard.isEmpty else { return nil }
         let lower = heard.lowercased()
@@ -48,9 +50,29 @@ public struct InstalledApps: Sendable {
             return exact
         }
 
-        // 2. Prefix match (either direction). Prefer the shortest matching
-        // app name — for "claud" we want "Claude" over "Claude Helper",
-        // for "vs" we want "VS Code" over a longer match.
+        // 2. Word-level match — any whole word in an installed name matches
+        // the heard name (equality or prefix-related). Catches the very
+        // common "Chrome" → "Google Chrome", "Word" → "Microsoft Word".
+        // Prefer the shortest matching name to avoid "Chrome Helper"-style
+        // siblings beating "Google Chrome".
+        if lower.count >= 3 {
+            let wordMatches = names.filter { name in
+                let words = name.lowercased().split(separator: " ").map(String.init)
+                return words.contains { word in
+                    word.count >= 3 && (
+                        word == lower
+                            || word.hasPrefix(lower)
+                            || lower.hasPrefix(word)
+                    )
+                }
+            }
+            if let best = wordMatches.min(by: { $0.count < $1.count }) {
+                return best
+            }
+        }
+
+        // 3. Prefix match on full name (either direction). Catches "claud"
+        // → "Claude" without going through Levenshtein.
         let prefixMatches = names.filter { name in
             let n = name.lowercased()
             return n.hasPrefix(lower) || lower.hasPrefix(n)
@@ -59,7 +81,7 @@ public struct InstalledApps: Sendable {
             return best
         }
 
-        // 3. Levenshtein.
+        // 4. Levenshtein.
         let threshold = max(2, lower.count / 3)
         let scored: [(String, Int)] = names.compactMap { name in
             let d = Self.levenshtein(lower, name.lowercased())
