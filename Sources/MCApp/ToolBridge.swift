@@ -71,10 +71,10 @@ enum ToolBridge {
 
             .custom(
                 name: "press_key",
-                description: "Press a keyboard key (with optional modifiers). Use to navigate UI: Tab to next field, Cmd+S to save, arrow keys to move selection, Cmd+W to close. Distinct from `dictate` — don't use `press_key` to type letters/words.",
+                description: "Press a keyboard key (with optional modifiers) into the currently focused Mac app. Always works on whatever app has focus — never ask the user which app. Use for shortcuts and UI navigation: 'press command N' → key='n', modifiers='cmd'; 'press cmd shift T' → key='t', modifiers='cmd shift'; 'press tab' → key='tab'; 'press escape' → key='escape'. Distinct from `dictate` — don't use `press_key` to type letters/words.",
                 properties: [
-                    "key": .init(type: "string", description: "Named key (tab, enter, return, escape, space, delete, up, down, left, right, home, end, pageup, pagedown, f1-f12) or a single letter/digit (a-z, 0-9). Case-insensitive."),
-                    "modifiers": .init(type: "string", description: "Optional modifiers as a space- or comma-separated list: cmd, shift, option, control. E.g. 'cmd shift' for Cmd+Shift+key."),
+                    "key": .init(type: "string", description: "The single base key only — a named key (tab, enter, return, escape, space, delete, up, down, left, right, home, end, pageup, pagedown, f1-f12) or a single letter/digit (a-z, 0-9). Do NOT include modifiers here. Case-insensitive."),
+                    "modifiers": .init(type: "string", description: "Optional modifiers as a space- or comma-separated list: cmd, shift, option, control. E.g. 'cmd' for Cmd+key, 'cmd shift' for Cmd+Shift+key."),
                     "count": .init(type: "number", description: "Number of times to press (default 1). Useful for 'tab three times'."),
                 ],
                 required: ["key"]
@@ -163,31 +163,38 @@ enum ToolBridge {
                 return AnthropicAgent.ToolResult(content: "Typed \(text.count) chars.")
 
             case "press_key":
-                let keyArg = (input.string("key") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                let modifiers = KeyboardEvents.Modifiers.parse(input.string("modifiers") ?? "")
+                let keyArgRaw = (input.string("key") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                var modifiers = KeyboardEvents.Modifiers.parse(input.string("modifiers") ?? "")
                 let count = max(1, min(50, Int(input.number("count") ?? 1)))
-                guard !keyArg.isEmpty else {
+                guard !keyArgRaw.isEmpty else {
                     return AnthropicAgent.ToolResult(
                         content: "Empty key — provide a name like 'tab' or a letter.",
                         isError: true
                     )
                 }
+                // Recover from the model packing modifiers into `key`: split
+                // off any leading modifier tokens ("cmd n", "command shift t")
+                // and merge them into modifiers. Also catches the STT-mashed
+                // form "commandn" / "cmds" by stripping a known prefix.
+                let (extraMods, baseKey) = Self.splitModifiers(from: keyArgRaw)
+                modifiers.formUnion(extraMods)
+                let keyArg = baseKey
+
                 if let named = KeyboardEvents.Key(rawValue: keyArg.lowercased()) {
                     for _ in 0..<count { KeyboardEvents.press(named, modifiers: modifiers) }
-                    return AnthropicAgent.ToolResult(content: "Pressed \(keyArg) ×\(count).")
+                    return AnthropicAgent.ToolResult(content: "Pressed \(keyArgRaw) ×\(count).")
                 }
-                // Single character (letter or digit)
                 if keyArg.count == 1, let ch = keyArg.first {
                     var ok = true
                     for _ in 0..<count {
                         ok = KeyboardEvents.press(ch, modifiers: modifiers) && ok
                     }
                     if ok {
-                        return AnthropicAgent.ToolResult(content: "Pressed \(keyArg) ×\(count).")
+                        return AnthropicAgent.ToolResult(content: "Pressed \(keyArgRaw) ×\(count).")
                     }
                 }
                 return AnthropicAgent.ToolResult(
-                    content: "Unknown key '\(keyArg)'. Use a named key or a single letter/digit.",
+                    content: "Unknown key '\(keyArgRaw)'. Use a named key or a single letter/digit.",
                     isError: true
                 )
 
@@ -225,6 +232,50 @@ enum ToolBridge {
                 )
             }
         }
+    }
+
+    /// Strip leading modifier tokens from a key argument so callers that
+    /// pack everything into `key` ("cmd n", "command shift t", "commandn")
+    /// still produce the right keystroke. Returns the inferred modifier
+    /// set plus the residual base key.
+    static func splitModifiers(from raw: String) -> (KeyboardEvents.Modifiers, String) {
+        let lower = raw.lowercased()
+        // Space- or punctuation-separated form: "cmd n", "command shift t".
+        let tokens = lower.split(whereSeparator: { ", +/&".contains($0) || $0.isWhitespace })
+        if tokens.count >= 2 {
+            var mods: KeyboardEvents.Modifiers = []
+            var idx = 0
+            while idx < tokens.count - 1 {
+                let m = KeyboardEvents.Modifiers.parse(String(tokens[idx]))
+                if m.isEmpty { break }
+                mods.formUnion(m)
+                idx += 1
+            }
+            if !mods.isEmpty {
+                return (mods, String(tokens[idx...].joined(separator: " ")))
+            }
+        }
+        // Run-on form from STT: "commandn", "cmds", "shifttab", "ctrlc".
+        let prefixes: [(String, KeyboardEvents.Modifiers)] = [
+            ("command", .command), ("control", .control), ("option", .option),
+            ("shift", .shift), ("cmd", .command), ("ctrl", .control),
+            ("opt", .option), ("alt", .option),
+        ]
+        var residual = lower
+        var mods: KeyboardEvents.Modifiers = []
+        // Repeatedly peel known prefixes ("commandshiftt").
+        outer: while true {
+            for (p, m) in prefixes where residual.hasPrefix(p) && residual.count > p.count {
+                mods.insert(m)
+                residual = String(residual.dropFirst(p.count))
+                continue outer
+            }
+            break
+        }
+        if !mods.isEmpty {
+            return (mods, residual)
+        }
+        return ([], raw)
     }
 
     private static func toolResult(from result: IntentDispatcher.Result) -> AnthropicAgent.ToolResult {
