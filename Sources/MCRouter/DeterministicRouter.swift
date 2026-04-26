@@ -39,6 +39,9 @@ public struct DeterministicRouter: Router {
 
     public func classify(utterance: String) async throws -> Intent? {
         let normalized = normalizer.normalize(utterance)
+        // Explicit phrase patterns first — special-cased apps (e.g.
+        // "open vs code" → "Visual Studio Code") need to win over the
+        // generic "open <anything>" fallback.
         for pattern in patterns {
             for phrase in pattern.phrases {
                 if normalized == phrase || normalized.contains(phrase) {
@@ -46,7 +49,42 @@ public struct DeterministicRouter: Router {
                 }
             }
         }
+        // Generic open-app fallback. Matches "open <name>", "launch <name>",
+        // "switch to <name>", etc. /usr/bin/open -a does fuzzy app-name
+        // resolution at the OS level so "open claude" / "open chatgpt" /
+        // "open spotify" all just work without needing to enumerate them.
+        if let intent = openAppFallback(normalized) {
+            return intent
+        }
         return nil
+    }
+
+    private func openAppFallback(_ normalized: String) -> Intent? {
+        let prefixes = ["open ", "launch ", "switch to ", "go to ", "start "]
+        for prefix in prefixes where normalized.hasPrefix(prefix) {
+            let raw = String(normalized.dropFirst(prefix.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { continue }
+            let name = Self.titleCaseAppName(raw)
+            return Intent(
+                intent: .openApp,
+                tool: "launch",
+                args: ["name": .string(name)],
+                confidence: 0.85, // lower than the 0.98 of explicit patterns
+                needsClarification: false
+            )
+        }
+        return nil
+    }
+
+    /// Title-case each word so `/usr/bin/open -a` gets a name shaped like
+    /// the .app bundle. macOS's app-name resolver is forgiving (handles
+    /// case mismatch + missing spaces), but title-casing improves the
+    /// user-visible HUD label.
+    static func titleCaseAppName(_ s: String) -> String {
+        s.split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+            .joined(separator: " ")
     }
 }
 
