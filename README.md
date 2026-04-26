@@ -24,15 +24,23 @@ Everything runs locally and in-process: Parakeet STT, Silero VAD, and Qwen3-0.6B
 
 ### One-time setup
 
-1. **Build** (downloads dependencies + Parakeet + Silero VAD + Qwen3-0.6B-MLX on first build, ~700 MB total):
+1. **Build** (downloads dependencies + Parakeet + Silero VAD on first build, ~400 MB):
 
    ```bash
    scripts/build.sh
    ```
 
-   We build via `xcodebuild` rather than `swift build` because mlx-swift's Metal shaders need Xcode to compile to `.metallib` — `swift build` produces a binary that crashes with *"Failed to load the default metallib"* on first MLX call. Everything else (FluidAudio, ArgumentParser, the MC modules) compiles fine either way.
+   We build via `xcodebuild` rather than `swift build` because mlx-swift's Metal shaders (used by the spike's local-LLM measurement path) need Xcode to compile to `.metallib`. Everything else compiles fine either way.
 
-2. **Permissions** — first run prompts for Microphone (allow). Dictation may need Accessibility (System Settings → Privacy & Security → Accessibility) for keystrokes to land in other apps.
+2. **Permissions** — first run prompts for Microphone (allow). Dictation may need Accessibility (System Settings → Privacy & Security → Accessibility) for keystrokes to land in other apps. First Chrome / Terminal command will prompt for Apple Events (one-time per target app).
+
+3. **Anthropic API key** for the LLM-fallback responder (the system speaks the response when your utterance doesn't match a hardcoded command):
+
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+   Default model is `claude-haiku-4-5` (cheapest + fastest). If the key isn't set the app still runs — un-classified utterances just don't get a spoken response.
 
 ### Running
 

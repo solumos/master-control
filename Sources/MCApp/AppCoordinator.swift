@@ -3,8 +3,8 @@ import Combine
 import Foundation
 import MCActions
 import MCAudio
+import MCCloud
 import MCCore
-import MCMlx
 import MCRouter
 import MCSTT
 
@@ -92,16 +92,10 @@ final class AppCoordinator: ObservableObject {
             let vad = VoiceActivityDetector()
             try await vad.warmLoad()
 
-            state = .starting(progress: "Qwen3-0.6B (MLX)")
-            let responder = MlxResponder()
-            var loadedResponder: MlxResponder? = nil
-            do {
-                try await responder.warmLoad { _ in }
-                loadedResponder = responder
-            } catch {
-                // Soft-fail: the LLM is fallback-only. Deterministic
-                // routing still works, un-classified utterances will
-                // just log without a spoken response.
+            state = .starting(progress: "Anthropic responder")
+            let responder: (any Responder)? = AnthropicResponder.fromEnvironment()
+            if responder == nil {
+                NSLog("[MasterControl] ANTHROPIC_API_KEY not set; LLM fallback disabled. Un-classified utterances will be logged but won't get a spoken response.")
             }
 
             let chain = RouterChain([DeterministicRouter()])
@@ -114,7 +108,7 @@ final class AppCoordinator: ObservableObject {
                 stt: stt,
                 vad: vad,
                 chain: chain,
-                responder: loadedResponder,
+                responder: responder,
                 dictator: dictator,
                 dispatcher: dispatcher,
                 wake: wake,

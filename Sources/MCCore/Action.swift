@@ -23,6 +23,16 @@ public extension Action {
     func undo(args: [String: ArgValue]) async throws {}
 }
 
+/// Generates a free-form natural-language response to an utterance.
+/// Implementations may run in-process (e.g. MLX) or call out to a cloud
+/// LLM (e.g. Anthropic). The host pipes the result into TTS.
+public protocol Responder: Sendable {
+    /// Friendly name used in telemetry/logging ("anthropic-haiku", "mlx-qwen3", …).
+    var name: String { get }
+
+    func respond(to prompt: String) async throws -> String
+}
+
 public enum ActionError: Error, LocalizedError, Sendable {
     case unknownTool(String)
     case missingArg(String)

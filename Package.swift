@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "MCInput", targets: ["MCInput"]),
         .library(name: "MCRouter", targets: ["MCRouter"]),
         .library(name: "MCMlx", targets: ["MCMlx"]),
+        .library(name: "MCCloud", targets: ["MCCloud"]),
         .library(name: "MCActions", targets: ["MCActions"]),
         .executable(name: "mc-spike", targets: ["MCSpike"]),
         .executable(name: "MasterControl", targets: ["MCApp"]),
@@ -54,6 +55,10 @@ let package = Package(
             dependencies: ["MCCore"]
         ),
         .target(
+            name: "MCCloud",
+            dependencies: ["MCCore"]
+        ),
+        .target(
             name: "MCMlx",
             dependencies: [
                 "MCCore",
@@ -86,7 +91,7 @@ let package = Package(
                 "MCAudio",
                 "MCSTT",
                 "MCRouter",
-                "MCMlx",
+                "MCCloud",
                 "MCActions",
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ]

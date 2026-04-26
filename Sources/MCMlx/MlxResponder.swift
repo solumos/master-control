@@ -14,7 +14,10 @@ import Tokenizers
 /// have to defer (the prior MlxRouter behavior), this just generates a
 /// short natural-language answer that the host speaks aloud — useful
 /// for "what's the weather", "tell me a joke", etc.
-public actor MlxResponder {
+public actor MlxResponder: Responder {
+
+    public nonisolated var name: String { "mlx-qwen3" }
+
 
     public struct Config: Sendable {
         public var modelID: String
@@ -23,13 +26,17 @@ public actor MlxResponder {
 
         public init(
             modelID: String = "mlx-community/Qwen3-0.6B-4bit",
-            maxTokens: Int = 80,
-            temperature: Float = 0.6
+            maxTokens: Int = 200,
+            temperature: Float = 0.6,
+            debug: Bool = false
         ) {
             self.modelID = modelID
             self.maxTokens = maxTokens
             self.temperature = temperature
+            self.debug = debug
         }
+
+        public var debug: Bool
     }
 
     public let config: Config
@@ -59,7 +66,12 @@ public actor MlxResponder {
     public func respond(to prompt: String) async throws -> String {
         guard let container else { return "" }
         let raw = try await runSession(container: container, prompt: prompt)
-        return Self.cleanForSpeech(raw)
+        let cleaned = Self.cleanForSpeech(raw)
+        if config.debug || cleaned.isEmpty {
+            FileHandle.standardError.write(Data("[mlx-responder] raw: \(raw.replacingOccurrences(of: "\n", with: " ⏎ "))\n".utf8))
+            FileHandle.standardError.write(Data("[mlx-responder] cleaned: \"\(cleaned)\"\n".utf8))
+        }
+        return cleaned
     }
 
     private func runSession(container: ModelContainer, prompt: String) async throws -> String {
@@ -76,20 +88,26 @@ public actor MlxResponder {
     /// Strip Qwen3's `<think>…</think>` block (it leaks even with /no_think
     /// when the model can't avoid the wrapper) and any code fences.
     /// What's left is what we feed to TTS.
+    ///
+    /// Recovery rules:
+    /// - Closed think block → strip entirely.
+    /// - Unclosed think block (model hit max_tokens mid-reasoning) →
+    ///   strip just the literal `<think>` tag, keep the partial thought
+    ///   so the user hears *something* instead of silence.
+    /// - If the model produced text with no think wrapper at all, use
+    ///   it as-is.
     static func cleanForSpeech(_ text: String) -> String {
         var s = text
-        // Drop think blocks.
         while let openRange = s.range(of: "<think>") {
             if let closeRange = s.range(of: "</think>", range: openRange.upperBound..<s.endIndex) {
                 s.removeSubrange(openRange.lowerBound..<closeRange.upperBound)
             } else {
-                s.removeSubrange(openRange.lowerBound..<s.endIndex)
+                // Unclosed — drop the tag itself but keep the content.
+                s.removeSubrange(openRange.lowerBound..<openRange.upperBound)
                 break
             }
         }
-        // Drop ``` code fences but keep their content.
         s = s.replacingOccurrences(of: "```", with: "")
-        // Collapse whitespace and trim.
         let collapsed = s.split(whereSeparator: { $0.isNewline || $0.isWhitespace })
             .joined(separator: " ")
         return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)

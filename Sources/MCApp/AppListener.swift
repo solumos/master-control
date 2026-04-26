@@ -3,7 +3,6 @@ import Foundation
 import MCActions
 import MCAudio
 import MCCore
-import MCMlx
 import MCRouter
 import MCSTT
 
@@ -32,7 +31,7 @@ actor AppListener {
     private let stt: ParakeetSTT
     private let vad: VoiceActivityDetector
     private let chain: RouterChain
-    private let responder: MlxResponder?
+    private let responder: (any Responder)?
     private let dictator: Dictator
     private let dispatcher: IntentDispatcher
     private let wake: WakeWord
@@ -47,7 +46,7 @@ actor AppListener {
         stt: ParakeetSTT,
         vad: VoiceActivityDetector,
         chain: RouterChain,
-        responder: MlxResponder?,
+        responder: (any Responder)?,
         dictator: Dictator,
         dispatcher: IntentDispatcher,
         wake: WakeWord,
