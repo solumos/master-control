@@ -93,8 +93,16 @@ final class AppCoordinator: ObservableObject {
             let vad = VoiceActivityDetector()
             try await vad.warmLoad()
 
-            state = .starting(progress: "Anthropic responder")
-            let responder: (any Responder)? = AnthropicResponder.fromEnvironment()
+            state = .starting(progress: "Anthropic agent")
+            let dispatcher = IntentDispatcher()
+            let dictator = Dictator()
+            let responder: (any Responder)? = AnthropicAgent.fromEnvironment(
+                tools: ToolBridge.tools(),
+                executor: ToolBridge.executor(
+                    dispatcher: dispatcher,
+                    dictator: dictator
+                )
+            )
             if responder == nil {
                 NSLog("[MasterControl] ANTHROPIC_API_KEY not set; LLM fallback disabled. Un-classified utterances will be logged but won't get a spoken response.")
             }
@@ -112,8 +120,6 @@ final class AppCoordinator: ObservableObject {
             let installedApps = InstalledApps.discover()
             NSLog("[MasterControl] indexed \(installedApps.names.count) installed apps for fuzzy matching")
             let chain = RouterChain([DeterministicRouter(installedApps: installedApps)])
-            let dictator = Dictator()
-            let dispatcher = IntentDispatcher()
             let wake = WakeWord()
             let audio = AudioFeedback()
 
