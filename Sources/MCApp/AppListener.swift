@@ -34,6 +34,7 @@ actor AppListener {
     private let dictator: Dictator
     private let dispatcher: IntentDispatcher
     private let wake: WakeWord
+    private let audio: AudioFeedback
 
     private var pendingSamples: [Float] = []
     private var utteranceSamples: [Float] = []
@@ -46,7 +47,8 @@ actor AppListener {
         chain: RouterChain,
         dictator: Dictator,
         dispatcher: IntentDispatcher,
-        wake: WakeWord
+        wake: WakeWord,
+        audio: AudioFeedback
     ) {
         self.stt = stt
         self.vad = vad
@@ -54,6 +56,16 @@ actor AppListener {
         self.dictator = dictator
         self.dispatcher = dispatcher
         self.wake = wake
+        self.audio = audio
+
+        // Announce "thinking…" when the chain falls through to the LLM
+        // router. Identifying by name keeps this hook independent of how
+        // the chain is configured.
+        chain.beforeRouter = { [weak audio] router in
+            if router.name == "mlx-qwen3" {
+                audio?.speak("thinking")
+            }
+        }
 
         var cont: AsyncStream<Event>.Continuation!
         self.stream = AsyncStream { continuation in
@@ -129,6 +141,10 @@ actor AppListener {
             return
         }
 
+        // Wake phrase recognized — short tick so the user knows we
+        // heard them, before the (possibly multi-second) action runs.
+        audio.play(.heard)
+
         switch match.kind {
         case .route:
             do {
@@ -136,9 +152,14 @@ actor AppListener {
                     let result = await dispatcher.dispatch(intent)
                     let status: ActivityEvent.Status
                     switch result.status {
-                    case .executed:           status = .executed(label: result.label)
-                    case .deferred:           status = .deferred(label: result.label)
-                    case .failed(let why):    status = .failed(label: result.label, reason: why)
+                    case .executed:
+                        status = .executed(label: result.label)
+                        audio.play(.success)
+                    case .deferred:
+                        status = .deferred(label: result.label)
+                    case .failed(let why):
+                        status = .failed(label: result.label, reason: why)
+                        audio.play(.failure)
                     }
                     continuation.yield(.activity(.init(
                         timestamp: Date(),
@@ -153,6 +174,7 @@ actor AppListener {
                     )))
                 }
             } catch {
+                audio.play(.failure)
                 continuation.yield(.activity(.init(
                     timestamp: Date(),
                     heard: match.payload,
@@ -161,6 +183,7 @@ actor AppListener {
             }
         case .dictate:
             _ = dictator.type(match.payload)
+            audio.play(.success)
             continuation.yield(.activity(.init(
                 timestamp: Date(),
                 heard: match.payload,

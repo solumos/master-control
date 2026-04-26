@@ -21,12 +21,18 @@ public final class RouterChain: Router, @unchecked Sendable {
     private let routers: [any Router]
     public private(set) var lastMatchedBy: String? = nil
 
+    /// Optional hook invoked just before each router's `classify` runs.
+    /// Lets the host announce "thinking…" when the chain is about to
+    /// invoke a slow router (e.g. the LLM fallback).
+    public var beforeRouter: (@Sendable (any Router) -> Void)?
+
     public init(_ routers: [any Router]) {
         self.routers = routers
     }
 
     public func classify(utterance: String) async throws -> Intent? {
         for router in routers {
+            beforeRouter?(router)
             if let intent = try await router.classify(utterance: utterance) {
                 lastMatchedBy = router.name
                 return intent

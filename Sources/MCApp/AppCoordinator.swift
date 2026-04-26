@@ -104,6 +104,7 @@ final class AppCoordinator: ObservableObject {
             let dictator = Dictator()
             let dispatcher = IntentDispatcher()
             let wake = WakeWord()
+            let audio = AudioFeedback()
 
             let listener = AppListener(
                 stt: stt,
@@ -111,7 +112,8 @@ final class AppCoordinator: ObservableObject {
                 chain: chain,
                 dictator: dictator,
                 dispatcher: dispatcher,
-                wake: wake
+                wake: wake,
+                audio: audio
             )
             self.listener = listener
             self.bridge.listener = listener
