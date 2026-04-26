@@ -21,6 +21,16 @@ public actor IntentDispatcher {
         }
         public let label: String
         public let status: Status
+        /// Optional natural-language string the host should speak aloud
+        /// (used by query-style actions like "what's playing"). Nil for
+        /// fire-and-forget commands.
+        public let speak: String?
+
+        public init(label: String, status: Status, speak: String? = nil) {
+            self.label = label
+            self.status = status
+            self.speak = speak
+        }
     }
 
     public init() {}
@@ -133,8 +143,100 @@ public actor IntentDispatcher {
             return await chromeCommand(args: args)
         case "terminal":
             return await terminalCommand(args: args)
+        case "media":
+            return mediaCommand(args: args)
+        case "spotify":
+            return spotifyCommand(args: args)
         default:
             return Result(label: "\(app) (unsupported)", status: .deferred)
+        }
+    }
+
+    // MARK: - media (universal media keys)
+
+    /// System-wide media keys. Don't target a specific app — macOS routes
+    /// to whatever holds "now playing" (Spotify, Music, browser, etc.).
+    private nonisolated func mediaCommand(args: [String: ArgValue]) -> Result {
+        guard let command = args["command"]?.stringValue else {
+            return Result(label: "Media (missing command)", status: .failed("missing 'command' arg"))
+        }
+        let key: MediaKeys.Key
+        let label: String
+        switch command {
+        case "playpause":
+            key = .playPause; label = "Play/pause"
+        case "next":
+            key = .next; label = "Next track"
+        case "prev":
+            key = .previous; label = "Previous track"
+        default:
+            return Result(label: "Media \(command)", status: .failed("unknown command"))
+        }
+        MediaKeys.post(key)
+        return Result(label: label, status: .executed)
+    }
+
+    // MARK: - spotify (in-app AppleScript)
+
+    /// Spotify-specific commands via NSAppleScript. Used when we need
+    /// more than play/pause — querying current track, playing a named
+    /// track, etc. First invocation prompts for Apple Events on Spotify.
+    private nonisolated func spotifyCommand(args: [String: ArgValue]) -> Result {
+        guard let command = args["command"]?.stringValue else {
+            return Result(label: "Spotify (missing command)", status: .failed("missing 'command' arg"))
+        }
+        switch command {
+        case "play":
+            return runSpotifyScript("tell application \"Spotify\" to play", label: "Spotify: play")
+        case "pause":
+            return runSpotifyScript("tell application \"Spotify\" to pause", label: "Spotify: pause")
+        case "playpause":
+            return runSpotifyScript("tell application \"Spotify\" to playpause", label: "Spotify: play/pause")
+        case "next":
+            return runSpotifyScript("tell application \"Spotify\" to next track", label: "Spotify: next")
+        case "prev":
+            return runSpotifyScript("tell application \"Spotify\" to previous track", label: "Spotify: previous")
+        case "now_playing":
+            return spotifyNowPlaying()
+        default:
+            return Result(label: "Spotify \(command)", status: .failed("unknown command"))
+        }
+    }
+
+    private nonisolated func runSpotifyScript(_ source: String, label: String) -> Result {
+        do {
+            try AppleScriptRunner.run(source)
+            return Result(label: label, status: .executed)
+        } catch {
+            return Result(label: label, status: .failed(error.localizedDescription))
+        }
+    }
+
+    private nonisolated func spotifyNowPlaying() -> Result {
+        let script = """
+        tell application "Spotify"
+          if player state is playing or player state is paused then
+            set t to name of current track
+            set a to artist of current track
+            return t & " by " & a
+          else
+            return "Nothing is playing"
+          end if
+        end tell
+        """
+        do {
+            let out = try AppleScriptRunner.run(script)
+            let text = out.string ?? "Nothing is playing"
+            return Result(
+                label: "Now playing: \(text)",
+                status: .executed,
+                speak: text
+            )
+        } catch {
+            return Result(
+                label: "Spotify: now playing",
+                status: .failed(error.localizedDescription)
+            )
         }
     }
 

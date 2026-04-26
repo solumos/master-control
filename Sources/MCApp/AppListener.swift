@@ -152,6 +152,11 @@ actor AppListener {
                     case .executed:
                         status = .executed(label: result.label)
                         audio.play(.success)
+                        // Query-style actions (e.g. "what's playing")
+                        // attach the spoken answer; pipe it to TTS.
+                        if let toSpeak = result.speak, !toSpeak.isEmpty, let speaker {
+                            try? await speaker.speak(toSpeak)
+                        }
                     case .deferred:
                         status = .deferred(label: result.label)
                     case .failed(let why):

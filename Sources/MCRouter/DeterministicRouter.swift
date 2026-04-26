@@ -164,6 +164,26 @@ extension Array where Element == DeterministicRouter.Pattern {
             .terminal("ls -la",       phrases: ["list files", "show files", "ls"]),
             .terminal("pwd",          phrases: ["working directory", "where am i", "print working directory"]),
             .terminal("clear",        phrases: ["clear terminal", "clear screen", "clear the terminal"]),
+
+            // Universal media keys — work for whatever's currently
+            // playing (Spotify, Music, YouTube, browser audio, …).
+            .media("playpause", phrases: [
+                "play", "press play", "play music", "resume", "resume music",
+                "pause", "press pause", "pause music", "stop music",
+            ]),
+            .media("next", phrases: [
+                "next song", "skip song", "skip", "next track", "skip track", "skip ahead",
+            ]),
+            .media("prev", phrases: [
+                "previous song", "previous track", "last song", "go back a song", "back a track",
+            ]),
+
+            // Spotify-specific (queries the running Spotify app via
+            // AppleScript). First call prompts for Apple Events on Spotify.
+            .spotify("now_playing", phrases: [
+                "what's playing", "what is playing", "current song", "now playing",
+                "what song is this", "what track is playing",
+            ]),
         ]
     }
 }
@@ -228,6 +248,42 @@ extension DeterministicRouter.Pattern {
                     "app": .string("terminal"),
                     "command": .string("run"),
                     "shell": .string(command),
+                ],
+                confidence: confidence,
+                needsClarification: false
+            )
+        )
+    }
+
+    /// Convenience constructor for system-wide media keys.
+    /// `command` is one of: playpause, next, prev.
+    public static func media(_ command: String, phrases: [String], confidence: Double = 0.98) -> Self {
+        .init(
+            phrases: phrases,
+            intent: .init(
+                intent: .appCommand,
+                tool: "media",
+                args: [
+                    "app": .string("media"),
+                    "command": .string(command),
+                ],
+                confidence: confidence,
+                needsClarification: false
+            )
+        )
+    }
+
+    /// Convenience constructor for Spotify-specific commands.
+    /// `command` is one of: play, pause, playpause, next, prev, now_playing.
+    public static func spotify(_ command: String, phrases: [String], confidence: Double = 0.98) -> Self {
+        .init(
+            phrases: phrases,
+            intent: .init(
+                intent: .appCommand,
+                tool: "spotify",
+                args: [
+                    "app": .string("spotify"),
+                    "command": .string(command),
                 ],
                 confidence: confidence,
                 needsClarification: false
