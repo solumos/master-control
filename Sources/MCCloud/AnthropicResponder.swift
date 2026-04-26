@@ -50,16 +50,18 @@ public actor AnthropicResponder: Responder {
     context), say so briefly and move on.
     """
 
-    /// Convenience constructor that pulls the API key from the environment.
-    /// Returns nil if `ANTHROPIC_API_KEY` is not set, so the host can
-    /// gracefully degrade to "no LLM available."
+    /// Convenience constructor that pulls the API key from the environment
+    /// or, failing that, from `~/Downloads/.env`. Returns nil if neither
+    /// source has it, so the host can gracefully degrade to "no LLM
+    /// available."
     public static func fromEnvironment(
         modelID: String = "claude-haiku-4-5",
         debug: Bool = false
     ) -> AnthropicResponder? {
-        guard let key = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !key.isEmpty else {
-            return nil
-        }
+        let envKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
+        let fileKey = EnvFile.value(for: "ANTHROPIC_API_KEY")
+        let key = (envKey?.isEmpty == false ? envKey : fileKey) ?? ""
+        guard !key.isEmpty else { return nil }
         return AnthropicResponder(config: .init(apiKey: key, modelID: modelID, debug: debug))
     }
 

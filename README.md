@@ -34,13 +34,13 @@ Everything runs locally and in-process: Parakeet STT, Silero VAD, and Qwen3-0.6B
 
 2. **Permissions** — first run prompts for Microphone (allow). Dictation may need Accessibility (System Settings → Privacy & Security → Accessibility) for keystrokes to land in other apps. First Chrome / Terminal command will prompt for Apple Events (one-time per target app).
 
-3. **Anthropic API key** for the LLM-fallback responder (the system speaks the response when your utterance doesn't match a hardcoded command):
+3. **Anthropic API key** for the LLM-fallback responder (the system speaks the response when your utterance doesn't match a hardcoded command). The app reads from `~/Downloads/.env` first, then `$ANTHROPIC_API_KEY` if set:
 
    ```bash
-   export ANTHROPIC_API_KEY=sk-ant-...
+   echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ~/Downloads/.env
    ```
 
-   Default model is `claude-haiku-4-5` (cheapest + fastest). If the key isn't set the app still runs — un-classified utterances just don't get a spoken response.
+   The file path is fixed (not configurable yet) and survives launches that don't inherit the shell environment (Finder double-click, login items). Default model is `claude-haiku-4-5` (cheapest + fastest). If neither source has the key the app still runs — un-classified utterances just don't get a spoken response.
 
 ### Running
 
