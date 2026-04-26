@@ -93,14 +93,18 @@ final class AppCoordinator: ObservableObject {
             try await vad.warmLoad()
 
             state = .starting(progress: "Qwen3-0.6B (MLX)")
-            let mlx = MlxRouter()
+            let responder = MlxResponder()
+            var loadedResponder: MlxResponder? = nil
             do {
-                try await mlx.warmLoad { _ in }
+                try await responder.warmLoad { _ in }
+                loadedResponder = responder
             } catch {
-                // Soft-fail: MLX is fallback-only. Continue with deterministic routing.
+                // Soft-fail: the LLM is fallback-only. Deterministic
+                // routing still works, un-classified utterances will
+                // just log without a spoken response.
             }
 
-            let chain = RouterChain([DeterministicRouter(), mlx])
+            let chain = RouterChain([DeterministicRouter()])
             let dictator = Dictator()
             let dispatcher = IntentDispatcher()
             let wake = WakeWord()
@@ -110,6 +114,7 @@ final class AppCoordinator: ObservableObject {
                 stt: stt,
                 vad: vad,
                 chain: chain,
+                responder: loadedResponder,
                 dictator: dictator,
                 dispatcher: dispatcher,
                 wake: wake,

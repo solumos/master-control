@@ -3,6 +3,7 @@ import Foundation
 import MCActions
 import MCAudio
 import MCCore
+import MCMlx
 import MCRouter
 import MCSTT
 
@@ -31,6 +32,7 @@ actor AppListener {
     private let stt: ParakeetSTT
     private let vad: VoiceActivityDetector
     private let chain: RouterChain
+    private let responder: MlxResponder?
     private let dictator: Dictator
     private let dispatcher: IntentDispatcher
     private let wake: WakeWord
@@ -45,6 +47,7 @@ actor AppListener {
         stt: ParakeetSTT,
         vad: VoiceActivityDetector,
         chain: RouterChain,
+        responder: MlxResponder?,
         dictator: Dictator,
         dispatcher: IntentDispatcher,
         wake: WakeWord,
@@ -53,19 +56,11 @@ actor AppListener {
         self.stt = stt
         self.vad = vad
         self.chain = chain
+        self.responder = responder
         self.dictator = dictator
         self.dispatcher = dispatcher
         self.wake = wake
         self.audio = audio
-
-        // Announce "thinking…" when the chain falls through to the LLM
-        // router. Identifying by name keeps this hook independent of how
-        // the chain is configured.
-        chain.beforeRouter = { [weak audio] router in
-            if router.name == "mlx-qwen3" {
-                audio?.speak("thinking")
-            }
-        }
 
         var cont: AsyncStream<Event>.Continuation!
         self.stream = AsyncStream { continuation in
@@ -165,6 +160,30 @@ actor AppListener {
                         timestamp: Date(),
                         heard: match.payload,
                         status: status
+                    )))
+                } else if let responder {
+                    // Deterministic chain didn't match — ask the LLM for a
+                    // free-form response and speak it. The user said the
+                    // wake phrase, so silence here would feel broken.
+                    let answer: String
+                    do {
+                        answer = try await responder.respond(to: match.payload)
+                    } catch {
+                        audio.play(.failure)
+                        continuation.yield(.activity(.init(
+                            timestamp: Date(),
+                            heard: match.payload,
+                            status: .failed(label: "responder", reason: error.localizedDescription)
+                        )))
+                        return
+                    }
+                    if !answer.isEmpty {
+                        audio.speak(answer)
+                    }
+                    continuation.yield(.activity(.init(
+                        timestamp: Date(),
+                        heard: match.payload,
+                        status: .executed(label: answer.isEmpty ? "(empty response)" : "“\(answer)”")
                     )))
                 } else {
                     continuation.yield(.activity(.init(

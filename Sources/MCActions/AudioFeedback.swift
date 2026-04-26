@@ -14,12 +14,19 @@ import Foundation
 public final class AudioFeedback: @unchecked Sendable {
 
     /// macOS bundles ~12 system sounds in /System/Library/Sounds.
-    /// Names omit the .aiff extension. Picked subjectively for tone:
-    /// success = Glass (soft bell), failure = Basso (low thunk).
-    public enum Cue: String, Sendable {
-        case success = "Glass"
-        case failure = "Basso"
-        case heard = "Tink"      // very short tick — wake phrase recognized
+    /// We use Tink for both "heard you" and "action complete" — quiet
+    /// and consistent.
+    public enum Cue: Sendable {
+        case heard
+        case success
+        case failure
+
+        var soundName: String {
+            switch self {
+            case .heard, .success:  return "Tink"
+            case .failure:          return "Basso"
+            }
+        }
     }
 
     private let synth = AVSpeechSynthesizer()
@@ -32,7 +39,7 @@ public final class AudioFeedback: @unchecked Sendable {
     public func play(_ cue: Cue) {
         // NSSound caches and plays asynchronously off the main thread.
         // Failures (e.g. missing system sound on a future OS) are silent.
-        NSSound(named: NSSound.Name(cue.rawValue))?.play()
+        NSSound(named: NSSound.Name(cue.soundName))?.play()
     }
 
     /// Speak a short string. Cancels any in-flight utterance so a
