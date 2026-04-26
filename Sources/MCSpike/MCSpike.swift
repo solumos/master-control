@@ -16,8 +16,8 @@ struct MCSpike: AsyncParsableCommand {
         commandName: "mc-spike",
         abstract: """
         Phase-0 latency spike for MasterControl. Always-on voice control: \
-        say "MC directive, <command>" and the system routes it. Say \
-        "MC directive, type <text>" to dictate into the focused app. \
+        say "master control, <command>" and the system routes it. Say \
+        "master control, type <text>" to dictate into the focused app. \
         Prints per-utterance timings and a p50/p99 histogram on completion.
         """
     )
@@ -60,9 +60,9 @@ struct MCSpike: AsyncParsableCommand {
         let total = self.iterations
 
         print("""
-        [ready] always-on listening. Wake phrase: "MC directive, <command>"
+        [ready] always-on listening. Wake phrase: "master control, <command>"
                  \(total) accepted utterances · Ctrl-C to abort early.
-                 Try: "MC directive, open Slack" · "MC directive, type hello world"
+                 Try: "master control, open Slack" · "master control, type hello world"
         """)
 
         let listener = Listener(

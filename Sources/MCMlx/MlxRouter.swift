@@ -23,15 +23,18 @@ public actor MlxRouter: Router {
         public var modelID: String
         public var maxTokens: Int
         public var temperature: Float
+        public var debug: Bool
 
         public init(
             modelID: String = "mlx-community/Qwen3-0.6B-4bit",
-            maxTokens: Int = 80,
-            temperature: Float = 0.0
+            maxTokens: Int = 60,
+            temperature: Float = 0.0,
+            debug: Bool = false
         ) {
             self.modelID = modelID
             self.maxTokens = maxTokens
             self.temperature = temperature
+            self.debug = debug
         }
     }
 
@@ -74,11 +77,16 @@ public actor MlxRouter: Router {
     public func classify(utterance: String) async throws -> Intent? {
         guard let container else { return nil }
         let response = try await runSession(container: container, prompt: utterance)
-        return parseIntent(from: response)
+        let parsed = parseIntent(from: response)
+        if config.debug || parsed == nil {
+            FileHandle.standardError.write(Data("[mlx] response: \(response.replacingOccurrences(of: "\n", with: " ⏎ "))\n".utf8))
+        }
+        return parsed
     }
 
     private func runSession(container: ModelContainer, prompt: String) async throws -> String {
-        let params = GenerateParameters(temperature: config.temperature)
+        var params = GenerateParameters(temperature: config.temperature)
+        params.maxTokens = config.maxTokens
         let session = ChatSession(
             container,
             instructions: Self.buildInstructions(toolSummary: toolSummary),
@@ -136,28 +144,15 @@ public actor MlxRouter: Router {
     """
 
     private static func buildInstructions(toolSummary: String) -> String {
-        // /no_think disables Qwen3's reasoning mode so it goes straight to
-        // the JSON response. Schema is described in plain English; we
-        // recover from minor formatting noise via extractJSONObject.
+        // Compact prompt — every token here is paid on every call as
+        // prefill. Schema enforcement is gone; we rely on Intent's lenient
+        // decoder to recover from omitted fields. /no_think shaves the
+        // reasoning block (Qwen3 still emits empty <think></think> tags
+        // but skips the chain-of-thought).
         """
         /no_think
-        You are an intent router for a voice-controlled Mac assistant.
-        Read the user's spoken command and respond with ONLY a JSON object
-        of this shape:
-
-        {
-          "intent": "open_app" | "run_shortcut" | "web_research" | "code_task" | "free_form_llm" | "vision_fallback",
-          "tool": "<short tool id>",
-          "args": { ...as needed... },
-          "confidence": 0.0-1.0,
-          "needs_clarification": false
-        }
-
-        Tools:
-        \(toolSummary)
-
-        - Output JSON only, no prose, no code fences.
-        - Set confidence below 0.7 for ambiguous commands.
+        Map this Mac voice command to JSON. Pick exactly one intent.
+        {"intent":"open_app|run_shortcut|web_research|code_task|free_form_llm|vision_fallback","tool":"...","args":{},"confidence":0..1}
         """
     }
 }

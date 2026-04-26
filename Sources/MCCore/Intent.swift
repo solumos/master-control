@@ -35,6 +35,24 @@ public struct Intent: Codable, Sendable {
         self.confidence = confidence
         self.needsClarification = needsClarification
     }
+
+    /// Lenient decoder: accepts JSON missing any optional-ish field. Small
+    /// LLMs frequently omit `needs_clarification` or `args`, and we'd rather
+    /// route on a partial intent than reject it. Unrecognized intent values
+    /// fall back to `.unknown`.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let raw = try c.decodeIfPresent(String.self, forKey: .intent),
+           let kind = IntentKind(rawValue: raw) {
+            self.intent = kind
+        } else {
+            self.intent = .unknown
+        }
+        self.tool = try c.decodeIfPresent(String.self, forKey: .tool) ?? ""
+        self.args = try c.decodeIfPresent([String: ArgValue].self, forKey: .args) ?? [:]
+        self.confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 0.5
+        self.needsClarification = try c.decodeIfPresent(Bool.self, forKey: .needsClarification) ?? false
+    }
 }
 
 public enum ArgValue: Codable, Sendable {

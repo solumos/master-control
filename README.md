@@ -44,15 +44,15 @@ scripts/run.sh --iterations 10
 scripts/run.sh --no-llm --iterations 10
 ```
 
-**No hotkeys.** The mic is always on. Speak naturally — VAD splits the stream into utterances. Only utterances that begin with the wake phrase **"MC directive"** are acted on; everything else is ignored.
+**No hotkeys.** The mic is always on. Speak naturally — VAD splits the stream into utterances. Only utterances that begin with the wake phrase **"master control"** are acted on; everything else is ignored.
 
 Modes are selected by the word that follows the wake phrase:
 
 | Speak | Result |
 |---|---|
-| `MC directive, open Slack` | route → deterministic match → action fires |
-| `MC directive, lock screen` | route → action fires |
-| `MC directive, type hello world this is a test` | dictate → typed into the focused app |
+| `master control, open Slack` | route → deterministic match → action fires |
+| `master control, lock screen` | route → action fires |
+| `master control, type hello world this is a test` | dictate → typed into the focused app |
 
 Each *accepted* utterance counts toward `--iterations`. Ignored ones (no wake word) don't.
 
