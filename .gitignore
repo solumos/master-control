@@ -1,0 +1,18 @@
+## Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+## macOS
+.DS_Store
+
+## Editor
+.vscode/
+.idea/
+*.swp
+
+## Local artifacts
+phase0-results.log
+*.log
