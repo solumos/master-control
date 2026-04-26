@@ -67,7 +67,9 @@ Free-form text into the terminal stays on the dictation path (no Enter key) for 
 
 | You say | What happens |
 |---|---|
-| "master control, type hello world" | "hello world" types into the focused app via synthesized keystrokes |
+| "master control, type hello world" | "hello world" types into the focused app |
+| "master control, send running 5 min late" | types "running 5 min late" + presses Enter (chat-app send pattern; works in Slack, Messages, WhatsApp, anywhere) |
+| "master control, post just landed" / "master control, reply on it" | same as send — `post` and `reply` are aliases |
 | "master control, press tab" | Tab key |
 | "master control, tab three times" | three tabs in a row |
 | "master control, save the file" | Cmd+S (the agent picks the right key combo) |

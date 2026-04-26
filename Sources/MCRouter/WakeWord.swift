@@ -29,24 +29,23 @@ public struct WakeWord: Sendable {
     public let trigger: Set<String>
     public let triggerLastWordPrefixes: [String]
     public let dictateTriggers: Set<String>
+    public let sendTriggers: Set<String>
 
     /// - Parameters:
     ///   - phrases: Wake phrases (any one matches). Should be normalized
     ///     (lowercase, no punctuation).
     ///   - dictateTriggers: First word AFTER the wake phrase that switches
     ///     the action from routing to dictation. Default: `["type", "dictate"]`.
+    ///   - sendTriggers: First word AFTER the wake phrase that switches the
+    ///     action to dictate-then-press-Enter (chat-app send). Default:
+    ///     `["send", "post", "reply"]`.
     public init(
         phrases: [String] = WakeWord.masterControlVariants,
-        dictateTriggers: Set<String> = ["type", "dictate"]
+        dictateTriggers: Set<String> = ["type", "dictate"],
+        sendTriggers: Set<String> = ["send", "post", "reply"]
     ) {
         self.phrases = phrases
         self.trigger = Set(phrases.map(WakeWord.normalize))
-        // For the fuzzy fallback, take the first 5 chars of the last word
-        // of each registered phrase (e.g. "control" → "contr"). Any utterance
-        // whose 2nd or 3rd word starts with one of these prefixes gets
-        // accepted, catching STT slips like "master patrol" → matches "patro"…
-        // wait, that wouldn't. Match by last-word prefix, lowering false
-        // negatives at the cost of slightly more false positives.
         self.triggerLastWordPrefixes = phrases.compactMap { phrase in
             let words = phrase.split(separator: " ")
             guard let last = words.last else { return nil }
@@ -54,16 +53,22 @@ public struct WakeWord: Sendable {
             return String(last.prefix(prefixLen))
         }
         self.dictateTriggers = dictateTriggers
+        self.sendTriggers = sendTriggers
     }
 
     public struct Match: Sendable {
         public enum Kind: Sendable {
+            /// Route through the deterministic chain or fall through to the
+            /// LLM agent.
             case route
+            /// Type the payload via synthesized keystrokes.
             case dictate
+            /// Type the payload AND press Enter — chat-app send pattern.
+            case send
         }
         public let kind: Kind
         /// The portion of the utterance after the wake word (and after
-        /// the dictate trigger if present), trimmed.
+        /// the mode-trigger word, if present), trimmed.
         public let payload: String
     }
 
@@ -71,31 +76,39 @@ public struct WakeWord: Sendable {
     /// Returns `nil` if the utterance isn't a directive to us.
     public func match(utterance: String) -> Match? {
         let norm = Self.normalize(utterance)
-        // First, try the explicit phrase list (longest-match-first).
         let sortedTriggers = trigger.sorted { $0.count > $1.count }
         var remainder: String
         if let hit = sortedTriggers.first(where: { norm.hasPrefix($0) }) {
             remainder = String(norm.dropFirst(hit.count))
         } else if let r = fuzzyTriggerPrefix(norm) {
-            // Fallback: any 1–2 short opening words followed by a token
-            // that begins with one of the registered phrases' last-word
-            // prefixes (e.g. "contr" → catches "control", "controlled",
-            // "controls", "controlling").
             remainder = r
         } else {
             return nil
         }
         remainder = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Check for dictate trigger word.
+        // Check for a mode trigger as the first word after the wake phrase.
         if let firstSpace = remainder.firstIndex(where: \.isWhitespace) {
-            let firstWord = String(remainder[..<firstSpace]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstWord = String(remainder[..<firstSpace])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = String(remainder[firstSpace...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if sendTriggers.contains(firstWord) {
+                return Match(kind: .send, payload: body)
+            }
             if dictateTriggers.contains(firstWord) {
-                let body = String(remainder[firstSpace...]).trimmingCharacters(in: .whitespacesAndNewlines)
                 return Match(kind: .dictate, payload: body)
             }
-        } else if dictateTriggers.contains(remainder) {
-            return Match(kind: .dictate, payload: "")
+        } else {
+            // Single trailing word after the wake phrase — only meaningful
+            // for dictate/send if we somehow have an empty payload, but
+            // include for symmetry.
+            if sendTriggers.contains(remainder) {
+                return Match(kind: .send, payload: "")
+            }
+            if dictateTriggers.contains(remainder) {
+                return Match(kind: .dictate, payload: "")
+            }
         }
 
         return Match(kind: .route, payload: remainder)
