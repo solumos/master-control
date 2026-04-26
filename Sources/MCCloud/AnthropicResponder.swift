@@ -23,15 +23,21 @@ public actor AnthropicResponder: Responder {
         public var endpoint: URL
         public var timeout: TimeInterval
         public var debug: Bool
+        /// Provide Anthropic's managed `web_search` tool. Claude decides
+        /// per-query whether to use it. Web-search calls add ~2–4 s of
+        /// latency and ~$0.01 each, but unlock fresh data ("weather",
+        /// "today's score", "current stock price", etc.).
+        public var enableWebSearch: Bool
 
         public init(
             apiKey: String,
             modelID: String = "claude-haiku-4-5",
-            maxTokens: Int = 200,
+            maxTokens: Int = 400,
             systemPrompt: String = AnthropicResponder.defaultSystemPrompt,
             endpoint: URL = URL(string: "https://api.anthropic.com/v1/messages")!,
-            timeout: TimeInterval = 15.0,
-            debug: Bool = false
+            timeout: TimeInterval = 30.0,
+            debug: Bool = false,
+            enableWebSearch: Bool = true
         ) {
             self.apiKey = apiKey
             self.modelID = modelID
@@ -40,14 +46,21 @@ public actor AnthropicResponder: Responder {
             self.endpoint = endpoint
             self.timeout = timeout
             self.debug = debug
+            self.enableWebSearch = enableWebSearch
         }
     }
 
     public static let defaultSystemPrompt = """
-    You are a brief Mac assistant. Answer the user in 1–2 short sentences \
-    suitable to be spoken aloud. No markdown, no lists, no preamble — just \
-    the answer. If you don't know something (live data, the user's local \
-    context), say so briefly and move on.
+    You are a brief Mac assistant. The user is asking by voice and your \
+    answer will be read aloud, so:
+
+    - Keep it to 1–2 short sentences.
+    - No markdown, no lists, no code blocks, no preamble.
+    - If the question needs current information (weather, scores, news, \
+      stock prices, etc.) use the web_search tool. Don't speculate when \
+      a search will give a real answer.
+    - When you do search, summarize in your own words. Don't read URLs \
+      or citation markers aloud.
     """
 
     /// Convenience constructor that pulls the API key from the environment
@@ -83,11 +96,15 @@ public actor AnthropicResponder: Responder {
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         req.setValue("application/json", forHTTPHeaderField: "content-type")
 
+        let tools: [MessagesRequest.Tool]? = config.enableWebSearch
+            ? [.init(type: "web_search_20250305", name: "web_search")]
+            : nil
         let body = MessagesRequest(
             model: config.modelID,
             maxTokens: config.maxTokens,
             system: config.systemPrompt,
-            messages: [.init(role: "user", content: prompt)]
+            messages: [.init(role: "user", content: prompt)],
+            tools: tools
         )
         req.httpBody = try JSONEncoder().encode(body)
 
@@ -104,13 +121,20 @@ public actor AnthropicResponder: Responder {
         }
 
         let decoded = try JSONDecoder().decode(MessagesResponse.self, from: data)
-        guard let text = decoded.content.first(where: { $0.type == "text" })?.text else {
+        // Web-search responses can contain multiple text blocks (one per
+        // search round-trip). Concatenate all text blocks into the final
+        // spoken answer; non-text blocks (tool_use, server_tool_use,
+        // web_search_tool_result) are intermediate state we don't need
+        // to surface.
+        let textBlocks = decoded.content.compactMap { $0.type == "text" ? $0.text : nil }
+        let combined = textBlocks.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !combined.isEmpty else {
             throw AnthropicError.malformedResponse
         }
         if config.debug {
-            FileHandle.standardError.write(Data("[anthropic] response: \(text)\n".utf8))
+            FileHandle.standardError.write(Data("[anthropic] blocks=\(decoded.content.count) text=\"\(combined)\"\n".utf8))
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return combined
     }
 }
 
@@ -133,13 +157,18 @@ private struct MessagesRequest: Encodable {
         let role: String
         let content: String
     }
+    struct Tool: Encodable {
+        let type: String
+        let name: String
+    }
     let model: String
     let maxTokens: Int
     let system: String
     let messages: [Message]
+    let tools: [Tool]?
 
     enum CodingKeys: String, CodingKey {
-        case model, system, messages
+        case model, system, messages, tools
         case maxTokens = "max_tokens"
     }
 }
