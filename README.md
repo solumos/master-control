@@ -52,12 +52,25 @@ scripts/run-app.sh
 
 # CLI spike — runs N utterances, prints histogram, exits
 scripts/run.sh --iterations 10
-
-# CLI spike with no LLM fallback (deterministic routing only)
-scripts/run.sh --no-llm --iterations 10
 ```
 
 The menu-bar app is the user-facing form: click the icon to see recent activity, pause/resume, or quit. The CLI spike stays as a measurement harness.
+
+### Installing as an .app
+
+For day-to-day use, package as a real `MasterControl.app` and drop it in `/Applications`:
+
+```bash
+scripts/install.sh
+```
+
+This builds, wraps the binary in a code-signed `.app` bundle (with `Info.plist`, hardened-runtime entitlements, and the SwiftPM resource bundles for MLX/Kokoro/Tokenizers), and copies it to `/Applications/MasterControl.app`. Then:
+
+```bash
+open /Applications/MasterControl.app
+```
+
+The first launch prompts for Microphone permission. The app currently uses **ad-hoc signing** (no Apple Developer ID), which is fine for installing on your own Mac. To distribute to other users without Gatekeeper warnings, the app needs Developer ID signing + notarization — that's [Wave 3](docs/SPEC.md) of the roadmap.
 
 **No hotkeys.** The mic is always on. Speak naturally — VAD splits the stream into utterances. Only utterances that begin with the wake phrase **"master control"** are acted on; everything else is ignored.
 

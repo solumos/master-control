@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened-runtime entitlements. Used when (eventually) signing
+         with a Developer ID + notarytool. The ad-hoc-signed dev build
+         doesn't strictly require them, but including them keeps the
+         eventual production build aligned with the dev one. -->
+
+    <!-- Microphone capture (AVAudioEngine). -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- AppleScript / osascript invocations against Chrome, Spotify,
+         Mail, Terminal, etc. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+
+    <!-- Required for MLX (Metal/Kokoro) to JIT-allocate executable
+         memory at runtime. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- We do NOT enable App Sandbox (com.apple.security.app-sandbox) —
+         per spec §4, it's incompatible with our requirements (Apple
+         Events to arbitrary apps, accessibility, persistent screen
+         capture). App-Store distribution is closed; Developer ID +
+         notarytool is the path. -->
+</dict>
+</plist>

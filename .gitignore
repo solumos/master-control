@@ -19,3 +19,6 @@ phase0-results.log
 
 ## Xcode-built products
 .xcode-build/
+
+## Packaged .app bundle (output of scripts/package-app.sh)
+build/
