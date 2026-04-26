@@ -11,8 +11,8 @@ import MCCore
 /// `dispatcher.dispatch(intent)`.
 enum ToolBridge {
 
-    static func tools() -> [AnthropicTool] {
-        [
+    static func tools(claudeAvailable: Bool) -> [AnthropicTool] {
+        var t: [AnthropicTool] = [
             .webSearch,
 
             .custom(
@@ -69,12 +69,25 @@ enum ToolBridge {
                 required: ["text"]
             ),
         ]
+        if claudeAvailable {
+            t.append(.custom(
+                name: "claude_task",
+                description: "Delegate a substantial coding/research task to a Claude Code subagent. Use when the user wants something deeper than a one-shot answer — e.g. 'have Claude review my latest commit', 'ask Claude to research Swift macros', 'have Claude refactor this file'. Returns immediately while the agent runs in the background; the user gets a system notification when it finishes. Works in their home directory by default.",
+                properties: [
+                    "task": .init(type: "string", description: "The full prompt to send to Claude. Be descriptive — Claude won't have follow-up turns."),
+                    "permission": .init(type: "string", description: "'read_only' (default — Claude can read files, search, and use the web but can't edit) or 'full' (Claude can also edit files and run shell commands). Use 'full' only when the user explicitly asks to *change* something."),
+                ],
+                required: ["task"]
+            ))
+        }
+        return t
     }
 
     /// Returns an executor closure suitable for `AnthropicAgent.init`.
     static func executor(
         dispatcher: IntentDispatcher,
-        dictator: Dictator
+        dictator: Dictator,
+        claudeRunner: ClaudeRunner?
     ) -> AnthropicAgent.ToolExecutor {
         return { @Sendable name, input in
             switch name {
@@ -137,6 +150,33 @@ enum ToolBridge {
                 let text = input.string("text") ?? ""
                 _ = dictator.type(text)
                 return AnthropicAgent.ToolResult(content: "Typed \(text.count) chars.")
+
+            case "claude_task":
+                guard let claudeRunner else {
+                    return AnthropicAgent.ToolResult(
+                        content: "Claude CLI not installed on this machine.",
+                        isError: true
+                    )
+                }
+                let task = input.string("task") ?? ""
+                guard !task.isEmpty else {
+                    return AnthropicAgent.ToolResult(
+                        content: "Empty task — provide a prompt.",
+                        isError: true
+                    )
+                }
+                let perm: ClaudeRunner.Permission =
+                    (input.string("permission") == "full") ? .full : .readOnly
+                if let started = claudeRunner.spawn(task: task, permission: perm) {
+                    return AnthropicAgent.ToolResult(
+                        content: "Started Claude (\(perm.rawValue)). Notification will fire when it finishes. Log: \(started.logURL.path)"
+                    )
+                } else {
+                    return AnthropicAgent.ToolResult(
+                        content: "Failed to launch Claude.",
+                        isError: true
+                    )
+                }
 
             default:
                 return AnthropicAgent.ToolResult(

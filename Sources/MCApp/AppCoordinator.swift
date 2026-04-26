@@ -98,11 +98,18 @@ final class AppCoordinator: ObservableObject {
             NSLog("[MasterControl] indexed \(installedApps.names.count) installed apps for fuzzy matching")
             let dispatcher = IntentDispatcher(installedApps: installedApps)
             let dictator = Dictator()
+            let claudeRunner = ClaudeRunner()
+            if claudeRunner.isAvailable {
+                NSLog("[MasterControl] claude CLI detected — claude_task tool enabled")
+            } else {
+                NSLog("[MasterControl] claude CLI not on PATH — claude_task tool disabled")
+            }
             let responder: (any Responder)? = AnthropicAgent.fromEnvironment(
-                tools: ToolBridge.tools(),
+                tools: ToolBridge.tools(claudeAvailable: claudeRunner.isAvailable),
                 executor: ToolBridge.executor(
                     dispatcher: dispatcher,
-                    dictator: dictator
+                    dictator: dictator,
+                    claudeRunner: claudeRunner.isAvailable ? claudeRunner : nil
                 )
             )
             if responder == nil {
