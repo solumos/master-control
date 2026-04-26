@@ -33,7 +33,28 @@ public final class AudioFeedback: @unchecked Sendable {
     private let voice: AVSpeechSynthesisVoice?
 
     public init(voiceLanguage: String = "en-US") {
-        self.voice = AVSpeechSynthesisVoice(language: voiceLanguage)
+        self.voice = Self.bestAvailableVoice(forLanguage: voiceLanguage)
+    }
+
+    /// Pick the highest-quality voice available for the given language.
+    /// macOS exposes voices at three quality tiers: default → enhanced →
+    /// premium (neural, sounds dramatically more natural). Premium and
+    /// enhanced voices are opt-in downloads via:
+    ///   System Settings → Accessibility → Spoken Content → System Voice
+    /// → "Manage Voices…". Until the user downloads one we fall back to
+    /// the basic default voice.
+    private static func bestAvailableVoice(forLanguage language: String) -> AVSpeechSynthesisVoice? {
+        let prefix = String(language.prefix(2))
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix(prefix) }
+
+        if let premium = voices.first(where: { $0.quality == .premium }) {
+            return premium
+        }
+        if let enhanced = voices.first(where: { $0.quality == .enhanced }) {
+            return enhanced
+        }
+        return AVSpeechSynthesisVoice(language: language)
     }
 
     public func play(_ cue: Cue) {
