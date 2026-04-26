@@ -5,6 +5,7 @@ import Foundation
 import MCActions
 import MCAudio
 import MCCore
+import MCMlx
 import MCRouter
 import MCSTT
 
@@ -24,6 +25,9 @@ struct MCSpike: AsyncParsableCommand {
     @Option(name: .long, help: "Number of accepted utterances before printing the summary.")
     var iterations: Int = 10
 
+    @Flag(name: .long, help: "Skip the MLX LLM fallback (deterministic-only routing).")
+    var noLlm: Bool = false
+
     func run() async throws {
         guard checkPermissions() else { return }
 
@@ -35,7 +39,21 @@ struct MCSpike: AsyncParsableCommand {
         let vad = VoiceActivityDetector()
         try await vad.warmLoad()
 
-        let chain = RouterChain([DeterministicRouter()])
+        var routers: [any Router] = [DeterministicRouter()]
+        if !noLlm {
+            print("[setup] warm-loading Qwen3-0.6B (MLX) — first run downloads ~350 MB…")
+            let mlx = MlxRouter()
+            try await mlx.warmLoad { progress in
+                if Int(progress.fractionCompleted * 100) % 25 == 0 {
+                    print("       \(Int(progress.fractionCompleted * 100))% downloaded")
+                }
+            }
+            routers.append(mlx)
+            print("[setup] router chain: deterministic → mlx-qwen3")
+        } else {
+            print("[setup] router chain: deterministic only (--no-llm)")
+        }
+        let chain = RouterChain(routers)
         let dictator = Dictator()
         let wake = WakeWord()
         let histogram = Histogram()

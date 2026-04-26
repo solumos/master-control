@@ -16,3 +16,6 @@ Package.resolved
 ## Local artifacts
 phase0-results.log
 *.log
+
+## Xcode-built products
+.xcode-build/

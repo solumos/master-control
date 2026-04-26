@@ -17,39 +17,31 @@ Design source of truth: [`docs/SPEC.md`](docs/SPEC.md).
 - macOS 14+ (developed on macOS 26.1 Tahoe)
 - Apple Silicon (M-series)
 - Swift 6+ toolchain (Xcode 16+ or `xcode-select` Command Line Tools)
-- [LM Studio](https://lmstudio.ai/) with `qwen3-0.6b-mlx-4bit` loaded and the local server running on port 1234 (Phase 0 only — Phase 1+ may swap to in-process MLX)
+
+Everything runs locally and in-process: Parakeet STT, Silero VAD, and Qwen3-0.6B-MLX as the LLM-fallback router. No separate runtime, no cloud calls.
 
 ## Phase 0 — running the latency spike
 
 ### One-time setup
 
-1. **Build** (downloads FluidAudio + the Parakeet CoreML model on first build, ~150 MB):
+1. **Build** (downloads dependencies + Parakeet + Silero VAD + Qwen3-0.6B-MLX on first build, ~700 MB total):
 
    ```bash
-   swift build -c release
+   scripts/build.sh
    ```
 
-2. **Install LM Studio** from <https://lmstudio.ai>, then:
-   - Search and download `qwen3-0.6b-mlx-4bit` (or any `qwen3-0.6b` MLX 4-bit variant).
-   - Load the model.
-   - Start the local server: *Developer* → *Local Server* → *Start Server* (port 1234 by default).
-   - Verify reachability: `curl -s http://localhost:1234/v1/models`.
+   We build via `xcodebuild` rather than `swift build` because mlx-swift's Metal shaders need Xcode to compile to `.metallib` — `swift build` produces a binary that crashes with *"Failed to load the default metallib"* on first MLX call. Everything else (FluidAudio, ArgumentParser, the MC modules) compiles fine either way.
 
-3. **Permissions** — first run will prompt for Microphone + Input Monitoring. Grant both in System Settings → Privacy & Security. Re-run after granting (TCC requires a fresh launch to pick up new grants).
+2. **Permissions** — first run prompts for Microphone (allow). Dictation may need Accessibility (System Settings → Privacy & Security → Accessibility) for keystrokes to land in other apps.
 
 ### Running
 
 ```bash
-# Default: 30 iterations, full STT + LM Studio router
-swift run -c release mc-spike --iterations 30 | tee phase0-results.log
+# 10 accepted utterances, deterministic + MLX fallback
+scripts/run.sh --iterations 10
 
-# STT-only (skip the router — useful for isolating STT cold-load issues)
-swift run -c release mc-spike --no-router --iterations 30
-
-# Custom endpoint / model
-swift run -c release mc-spike \
-    --endpoint http://localhost:8080/v1/chat/completions \
-    --model my-model-id
+# Skip the LLM (deterministic-only routing)
+scripts/run.sh --no-llm --iterations 10
 ```
 
 **No hotkeys.** The mic is always on. Speak naturally — VAD splits the stream into utterances. Only utterances that begin with the wake phrase **"MC directive"** are acted on; everything else is ignored.

@@ -12,12 +12,16 @@ let package = Package(
         .library(name: "MCSTT", targets: ["MCSTT"]),
         .library(name: "MCInput", targets: ["MCInput"]),
         .library(name: "MCRouter", targets: ["MCRouter"]),
+        .library(name: "MCMlx", targets: ["MCMlx"]),
         .library(name: "MCActions", targets: ["MCActions"]),
         .executable(name: "mc-spike", targets: ["MCSpike"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.4"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", branch: "main"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.0"),
+        .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.8.1"),
     ],
     targets: [
         .target(name: "MCCore"),
@@ -48,6 +52,19 @@ let package = Package(
             name: "MCActions",
             dependencies: ["MCCore"]
         ),
+        .target(
+            name: "MCMlx",
+            dependencies: [
+                "MCCore",
+                "MCRouter",
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+            ]
+        ),
         .executableTarget(
             name: "MCSpike",
             dependencies: [
@@ -55,6 +72,7 @@ let package = Package(
                 "MCAudio",
                 "MCSTT",
                 "MCRouter",
+                "MCMlx",
                 "MCActions",
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
