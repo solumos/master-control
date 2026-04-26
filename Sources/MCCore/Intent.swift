@@ -3,6 +3,9 @@ import Foundation
 public enum IntentKind: String, Codable, Sendable {
     case openApp = "open_app"
     case runShortcut = "run_shortcut"
+    /// In-app automation: Chrome tab nav, Terminal command, etc. Args
+    /// carry `app` (target app id) and `command` (verb).
+    case appCommand = "app_command"
     case webResearch = "web_research"
     case codeTask = "code_task"
     case freeFormLLM = "free_form_llm"

@@ -31,6 +31,8 @@ public actor IntentDispatcher {
             return await openApp(args: intent.args)
         case .runShortcut:
             return await runShortcut(args: intent.args)
+        case .appCommand:
+            return await appCommand(args: intent.args)
         case .webResearch, .codeTask, .freeFormLLM, .visionFallback:
             return Result(
                 label: "\(intent.intent.rawValue) (\(intent.args["query"]?.stringValue ?? intent.args["prompt"]?.stringValue ?? ""))",
@@ -118,6 +120,129 @@ public actor IntentDispatcher {
         default:
             return nil
         }
+    }
+
+    // MARK: - app_command
+
+    private func appCommand(args: [String: ArgValue]) async -> Result {
+        guard let app = args["app"]?.stringValue else {
+            return Result(label: "app_command (missing app)", status: .failed("missing 'app' arg"))
+        }
+        switch app {
+        case "chrome":
+            return await chromeCommand(args: args)
+        case "terminal":
+            return await terminalCommand(args: args)
+        default:
+            return Result(label: "\(app) (unsupported)", status: .deferred)
+        }
+    }
+
+    /// Chrome AppleScript bindings. Targets Google Chrome explicitly so the
+    /// command works whether or not Chrome is the frontmost app. Each first
+    /// invocation against a target prompts for Apple Events permission.
+    private func chromeCommand(args: [String: ArgValue]) async -> Result {
+        guard let command = args["command"]?.stringValue else {
+            return Result(label: "Chrome (missing command)", status: .failed("missing 'command' arg"))
+        }
+        let app = "Google Chrome"
+        let (script, label): (String, String) = {
+            switch command {
+            case "next_tab":
+                return ("""
+                tell application "\(app)"
+                  activate
+                  tell front window
+                    set N to count of tabs
+                    set i to active tab index
+                    if i < N then set active tab index to i + 1
+                  end tell
+                end tell
+                """, "Chrome: next tab")
+            case "prev_tab":
+                return ("""
+                tell application "\(app)"
+                  activate
+                  tell front window
+                    set i to active tab index
+                    if i > 1 then set active tab index to i - 1
+                  end tell
+                end tell
+                """, "Chrome: previous tab")
+            case "new_tab":
+                return ("""
+                tell application "\(app)"
+                  activate
+                  tell front window to make new tab at end of tabs
+                end tell
+                """, "Chrome: new tab")
+            case "close_tab":
+                return ("""
+                tell application "\(app)"
+                  tell front window to close active tab
+                end tell
+                """, "Chrome: close tab")
+            case "reload":
+                return ("""
+                tell application "\(app)"
+                  tell active tab of front window to reload
+                end tell
+                """, "Chrome: reload")
+            case "back":
+                return ("""
+                tell application "\(app)"
+                  tell active tab of front window to go back
+                end tell
+                """, "Chrome: back")
+            case "forward":
+                return ("""
+                tell application "\(app)"
+                  tell active tab of front window to go forward
+                end tell
+                """, "Chrome: forward")
+            default:
+                return ("", "Chrome: \(command)")
+            }
+        }()
+        guard !script.isEmpty else {
+            return Result(label: label, status: .failed("unknown command"))
+        }
+        return await runProcess(
+            executable: "/usr/bin/osascript",
+            arguments: ["-e", script],
+            label: label
+        )
+    }
+
+    /// Terminal AppleScript bindings. Only runs whitelisted commands —
+    /// the deterministic router emits a fixed `shell` string per match.
+    /// Free-form text-into-terminal stays on the dictate path so we don't
+    /// hand voice commands an Enter keystroke.
+    private func terminalCommand(args: [String: ArgValue]) async -> Result {
+        guard args["command"]?.stringValue == "run" else {
+            return Result(label: "Terminal (missing run command)", status: .failed("expected 'run'"))
+        }
+        guard let shell = args["shell"]?.stringValue, !shell.isEmpty else {
+            return Result(label: "Terminal (missing shell)", status: .failed("missing 'shell' arg"))
+        }
+        // Escape double-quotes for the AppleScript string literal.
+        let escaped = shell.replacingOccurrences(of: "\\", with: "\\\\")
+                          .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "Terminal"
+          activate
+          if (count of windows) = 0 then
+            do script "\(escaped)"
+          else
+            do script "\(escaped)" in front window
+          end if
+        end tell
+        """
+        return await runProcess(
+            executable: "/usr/bin/osascript",
+            arguments: ["-e", script],
+            label: "Terminal: \(shell)"
+        )
     }
 
     // MARK: - Process runner

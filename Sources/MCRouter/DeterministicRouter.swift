@@ -99,6 +99,24 @@ extension Array where Element == DeterministicRouter.Pattern {
             .runShortcut("Unmute Microphone", phrases: ["unmute mic", "unmute microphone"]),
             .runShortcut("Volume Up",         phrases: ["volume up", "increase volume", "louder"]),
             .runShortcut("Volume Down",       phrases: ["volume down", "decrease volume", "quieter"]),
+
+            // Chrome tab + navigation control (AppleScript via Tier 1)
+            .chrome("next_tab",  phrases: ["next tab", "switch to next tab", "tab right"]),
+            .chrome("prev_tab",  phrases: ["previous tab", "prev tab", "tab left", "go back a tab"]),
+            .chrome("new_tab",   phrases: ["new tab", "open a new tab", "open new tab"]),
+            .chrome("close_tab", phrases: ["close tab", "close this tab", "close current tab"]),
+            .chrome("reload",    phrases: ["reload", "reload page", "refresh", "refresh page"]),
+            .chrome("back",      phrases: ["go back", "navigate back", "browser back"]),
+            .chrome("forward",   phrases: ["go forward", "navigate forward", "browser forward"]),
+
+            // Terminal commands (whitelisted — only safe read-only verbs).
+            // Free-form input into the terminal stays in the dictate path
+            // ("master control, type git status") which doesn't press Enter.
+            .terminal("git status",   phrases: ["git status", "status of repo", "show git status"]),
+            .terminal("git log --oneline -20", phrases: ["git log", "show git log", "recent commits"]),
+            .terminal("ls -la",       phrases: ["list files", "show files", "ls"]),
+            .terminal("pwd",          phrases: ["working directory", "where am i", "print working directory"]),
+            .terminal("clear",        phrases: ["clear terminal", "clear screen", "clear the terminal"]),
         ]
     }
 }
@@ -126,6 +144,44 @@ extension DeterministicRouter.Pattern {
                 intent: .runShortcut,
                 tool: "shortcuts_run",
                 args: ["name": .string(name)],
+                confidence: confidence,
+                needsClarification: false
+            )
+        )
+    }
+
+    /// Convenience constructor for in-Chrome commands.
+    /// `command` is one of: next_tab, prev_tab, new_tab, close_tab,
+    /// reload, back, forward.
+    public static func chrome(_ command: String, phrases: [String], confidence: Double = 0.98) -> Self {
+        .init(
+            phrases: phrases,
+            intent: .init(
+                intent: .appCommand,
+                tool: "chrome",
+                args: [
+                    "app": .string("chrome"),
+                    "command": .string(command),
+                ],
+                confidence: confidence,
+                needsClarification: false
+            )
+        )
+    }
+
+    /// Convenience constructor for in-Terminal commands.
+    /// `command` is the literal shell command to execute.
+    public static func terminal(_ command: String, phrases: [String], confidence: Double = 0.98) -> Self {
+        .init(
+            phrases: phrases,
+            intent: .init(
+                intent: .appCommand,
+                tool: "terminal",
+                args: [
+                    "app": .string("terminal"),
+                    "command": .string("run"),
+                    "shell": .string(command),
+                ],
                 confidence: confidence,
                 needsClarification: false
             )
