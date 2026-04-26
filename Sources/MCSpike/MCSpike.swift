@@ -55,6 +55,7 @@ struct MCSpike: AsyncParsableCommand {
         }
         let chain = RouterChain(routers)
         let dictator = Dictator()
+        let dispatcher = IntentDispatcher()
         let wake = WakeWord()
         let histogram = Histogram()
         let total = self.iterations
@@ -71,6 +72,7 @@ struct MCSpike: AsyncParsableCommand {
             vad: vad,
             chain: chain,
             dictator: dictator,
+            dispatcher: dispatcher,
             wake: wake,
             histogram: histogram
         )
@@ -193,6 +195,7 @@ private actor Listener {
     private let vad: VoiceActivityDetector
     private let chain: RouterChain
     private let dictator: Dictator
+    private let dispatcher: IntentDispatcher
     private let wake: WakeWord
     private let histogram: Histogram
 
@@ -208,6 +211,7 @@ private actor Listener {
         vad: VoiceActivityDetector,
         chain: RouterChain,
         dictator: Dictator,
+        dispatcher: IntentDispatcher,
         wake: WakeWord,
         histogram: Histogram
     ) {
@@ -216,6 +220,7 @@ private actor Listener {
         self.vad = vad
         self.chain = chain
         self.dictator = dictator
+        self.dispatcher = dispatcher
         self.wake = wake
         self.histogram = histogram
     }
@@ -286,9 +291,16 @@ private actor Listener {
         case .route:
             do {
                 if let intent = try await chain.classify(utterance: match.payload) {
-                    let json = (try? JSONEncoder().encode(intent))
-                        .flatMap { String(data: $0, encoding: .utf8) } ?? "<encode failed>"
-                    trailing = "matched: \(chain.lastMatchedBy ?? "?") · \(json)"
+                    let matchedBy = chain.lastMatchedBy ?? "?"
+                    let result = await dispatcher.dispatch(intent)
+                    switch result.status {
+                    case .executed:
+                        trailing = "matched: \(matchedBy) · \(result.label) ✓"
+                    case .deferred:
+                        trailing = "matched: \(matchedBy) · \(result.label) (deferred)"
+                    case .failed(let why):
+                        trailing = "matched: \(matchedBy) · \(result.label) ✗ \(why)"
+                    }
                 } else {
                     trailing = "matched: none · (\"\(match.payload)\")"
                 }
