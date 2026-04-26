@@ -36,13 +36,20 @@ Everything runs locally and in-process: Parakeet STT, Silero VAD, and Qwen3-0.6B
 
 ### Running
 
+Two surfaces share the same pipeline (STT + VAD + wake-phrase + router + dispatcher):
+
 ```bash
-# 10 accepted utterances, deterministic + MLX fallback
+# Menu-bar app — runs continuously, microphone icon in the menu bar
+scripts/run-app.sh
+
+# CLI spike — runs N utterances, prints histogram, exits
 scripts/run.sh --iterations 10
 
-# Skip the LLM (deterministic-only routing)
+# CLI spike with no LLM fallback (deterministic routing only)
 scripts/run.sh --no-llm --iterations 10
 ```
+
+The menu-bar app is the user-facing form: click the icon to see recent activity, pause/resume, or quit. The CLI spike stays as a measurement harness.
 
 **No hotkeys.** The mic is always on. Speak naturally — VAD splits the stream into utterances. Only utterances that begin with the wake phrase **"master control"** are acted on; everything else is ignored.
 

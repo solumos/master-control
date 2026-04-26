@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "MCMlx", targets: ["MCMlx"]),
         .library(name: "MCActions", targets: ["MCActions"]),
         .executable(name: "mc-spike", targets: ["MCSpike"]),
+        .executable(name: "MasterControl", targets: ["MCApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.4"),
@@ -76,6 +77,18 @@ let package = Package(
                 "MCActions",
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .executableTarget(
+            name: "MCApp",
+            dependencies: [
+                "MCCore",
+                "MCAudio",
+                "MCSTT",
+                "MCRouter",
+                "MCMlx",
+                "MCActions",
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ]
         ),
     ]
