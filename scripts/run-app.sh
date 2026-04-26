@@ -1,20 +1,35 @@
 #!/usr/bin/env bash
-# Build (if needed) and launch MasterControl as a menu-bar app.
+# Build, package, and launch MasterControl as a real .app bundle.
 #
-# Look for a microphone icon in the menu bar after launch.
+# Running the bundled .app (vs the bare binary) makes the system treat
+# MasterControl as a normal app: notifications work, TCC tracks by bundle
+# ID rather than by binary path (so permissions don't reset on each
+# rebuild), and Activity Monitor shows the proper name.
+#
+# `--bare` skips packaging and runs the unpackaged binary instead — fast
+# iteration when you don't need notifications and don't mind re-granting
+# Mic on every rebuild. (Claude task notifications won't fire in this
+# mode; the runner falls back to NSLog.)
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 CONFIG="Release"
-BIN=".xcode-build/Build/Products/$CONFIG/MasterControl"
 
-if [[ ! -x "$BIN" ]]; then
-  echo "[run-app] no binary at $BIN — building first"
-  scripts/build.sh "$CONFIG"
+if [[ "${1:-}" == "--bare" ]]; then
+  BIN=".xcode-build/Build/Products/$CONFIG/MasterControl"
+  if [[ ! -x "$BIN" ]]; then
+    echo "[run-app] no binary at $BIN — building first"
+    scripts/build.sh "$CONFIG" MasterControl
+  fi
+  shift
+  exec "$BIN" "$@"
 fi
 
-# Run in foreground so logs/permission prompts surface here.
-# Ctrl-C exits.
-exec "$BIN" "$@"
+scripts/package-app.sh
+
+APP="build/MasterControl.app"
+echo
+echo "==> Launching $APP"
+exec "$APP/Contents/MacOS/MasterControl" "$@"

@@ -63,15 +63,24 @@ Routes to whatever app currently holds "now playing" — Spotify, Apple Music, Y
 
 Free-form text into the terminal stays on the dictation path (no Enter key) for safety.
 
-### Dictate into any app
+### Dictate + navigate any app
 
 | You say | What happens |
 |---|---|
-| "master control, type hello world" | "hello world" types into the focused app via synthesized keystrokes |
+| "master control, type hello world" | "hello world" types into the focused app |
+| "master control, send running 5 min late" | types "running 5 min late" + presses Enter (chat-app send pattern; works in Slack, Messages, WhatsApp, anywhere) |
+| "master control, post just landed" / "master control, reply on it" | same as send — `post` and `reply` are aliases |
+| "master control, press tab" | Tab key |
+| "master control, tab three times" | three tabs in a row |
+| "master control, save the file" | Cmd+S (the agent picks the right key combo) |
+| "master control, press escape" / "press enter" | …obvious |
+| "master control, arrow down" / "press up" | arrow keys |
+
+Dictation uses Unicode-string events for typed text; the `press_key` tool uses proper virtual-key codes for Tab/arrows/Cmd-shortcuts so apps see them as real keystrokes (Tab moves focus, Cmd+S saves, etc.). Both use `cghidEventTap` and require **Accessibility** permission for delivery to other apps — first use prompts you, or add `MasterControl.app` in System Settings → Privacy & Security → Accessibility.
 
 ### Ask anything
 
-For anything the deterministic patterns don't catch, Claude (Haiku 4.5) takes over with `web_search` plus 6 custom tools (`open_app`, `media`, `spotify`, `chrome`, `system_action`, `dictate`). Claude can compose multi-step requests:
+For anything the deterministic patterns don't catch, Claude (Haiku 4.5) takes over with `web_search` plus 7 custom tools (`open_app`, `media`, `spotify`, `chrome`, `system_action`, `dictate`, `claude_task`). Claude can compose multi-step requests:
 
 | You say | What Claude does |
 |---|---|
@@ -80,6 +89,19 @@ For anything the deterministic patterns don't catch, Claude (Haiku 4.5) takes ov
 | "master control, open Spotify and play something" | calls `open_app(Spotify)` then `media(playpause)` |
 | "master control, switch to Chrome and reload" | two tool calls in sequence |
 | "master control, tell me a joke" | answers directly, no search |
+
+### Delegate to Claude Code
+
+If `claude` is on your PATH, the agent can hand off long-running coding/research tasks to a Claude Code subagent in the background:
+
+| You say | What happens |
+|---|---|
+| "master control, have Claude review my latest commit" | spawns `claude --print` with the task; Haiku immediately confirms ("Started Claude on that"); a system notification fires when Claude finishes, with the result |
+| "master control, ask Claude to research Swift macros" | same — read-only tool set by default |
+
+Claude tasks run in `~/` by default. Output is logged to `~/Library/Logs/MasterControl/claude/<timestamp>.log`. The default permission posture is **read-only** (`Read,Grep,Glob,WebSearch,WebFetch`) — Claude can answer and search but can't edit files. Ask explicitly to "have Claude *change*" / "have Claude *implement*" and the agent will pass `permission: "full"`, lifting the restriction.
+
+Because there's no terminal attached to prompt against, Claude runs with `--dangerously-skip-permissions`. Combined with the read-only tool set this is reasonable; if you grant `full` permission via voice, anything Claude is willing to do, it will do unattended. Calibrate trust accordingly.
 
 Responses are spoken via local **Kokoro neural TTS** (FluidAudio) — no cloud TTS, no per-character cost, sounds dramatically more natural than `AVSpeechSynthesizer`.
 

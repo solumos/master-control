@@ -215,6 +215,22 @@ actor AppListener {
                 heard: match.payload,
                 status: .dictated(charCount: match.payload.count)
             )))
+
+        case .send:
+            // Chat-app pattern: type the message, brief settle, hit Enter.
+            // The 80 ms delay gives the focused app time to process the
+            // last typed character before the synthetic Return arrives —
+            // a few apps drop the final character if Enter follows
+            // immediately.
+            _ = dictator.type(match.payload)
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            KeyboardEvents.press(.return)
+            audio.play(.success)
+            continuation.yield(.activity(.init(
+                timestamp: Date(),
+                heard: match.payload,
+                status: .executed(label: "Sent (\(match.payload.count) chars)")
+            )))
         }
     }
 
