@@ -53,6 +53,7 @@ final class AppCoordinator: ObservableObject {
     private var listener: AppListener?
     private let bridge = AppListenerBridge()
     private var consumeTask: Task<Void, Never>?
+    private let logFile = ActivityLogFile()
 
     init() {
         Task { await bootstrap() }
@@ -157,6 +158,7 @@ final class AppCoordinator: ObservableObject {
                     if self.events.count > Self.maxEvents {
                         self.events.removeFirst(self.events.count - Self.maxEvents)
                     }
+                    self.logFile.append(activity)
                 }
             }
         }
