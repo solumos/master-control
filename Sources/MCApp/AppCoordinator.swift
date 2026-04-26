@@ -108,7 +108,9 @@ final class AppCoordinator: ObservableObject {
                 NSLog("[MasterControl] Kokoro TTS failed to load (\(error.localizedDescription)); responses will be logged but not spoken.")
             }
 
-            let chain = RouterChain([DeterministicRouter()])
+            let installedApps = InstalledApps.discover()
+            NSLog("[MasterControl] indexed \(installedApps.names.count) installed apps for fuzzy matching")
+            let chain = RouterChain([DeterministicRouter(installedApps: installedApps)])
             let dictator = Dictator()
             let dispatcher = IntentDispatcher()
             let wake = WakeWord()

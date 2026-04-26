@@ -31,10 +31,16 @@ public struct DeterministicRouter: Router {
 
     private let patterns: [Pattern]
     private let normalizer: Normalizer
+    private let installedApps: InstalledApps?
 
-    public init(patterns: [Pattern] = .seedSet, normalizer: Normalizer = Normalizer()) {
+    public init(
+        patterns: [Pattern] = .seedSet,
+        normalizer: Normalizer = Normalizer(),
+        installedApps: InstalledApps? = nil
+    ) {
         self.patterns = patterns
         self.normalizer = normalizer
+        self.installedApps = installedApps
     }
 
     public func classify(utterance: String) async throws -> Intent? {
@@ -65,7 +71,10 @@ public struct DeterministicRouter: Router {
             let raw = String(normalized.dropFirst(prefix.count))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !raw.isEmpty else { continue }
-            let name = Self.titleCaseAppName(raw)
+            // Prefer a fuzzy match against actually-installed apps so STT
+            // slips on short proper nouns ("claw" → "Claude") still hit.
+            // Title-case fallback if we don't have an apps index.
+            let name = installedApps?.bestMatch(for: raw) ?? Self.titleCaseAppName(raw)
             return Intent(
                 intent: .openApp,
                 tool: "launch",
