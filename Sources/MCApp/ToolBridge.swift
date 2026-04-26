@@ -68,6 +68,17 @@ enum ToolBridge {
                 ],
                 required: ["text"]
             ),
+
+            .custom(
+                name: "press_key",
+                description: "Press a keyboard key (with optional modifiers). Use to navigate UI: Tab to next field, Cmd+S to save, arrow keys to move selection, Cmd+W to close. Distinct from `dictate` — don't use `press_key` to type letters/words.",
+                properties: [
+                    "key": .init(type: "string", description: "Named key (tab, enter, return, escape, space, delete, up, down, left, right, home, end, pageup, pagedown, f1-f12) or a single letter/digit (a-z, 0-9). Case-insensitive."),
+                    "modifiers": .init(type: "string", description: "Optional modifiers as a space- or comma-separated list: cmd, shift, option, control. E.g. 'cmd shift' for Cmd+Shift+key."),
+                    "count": .init(type: "number", description: "Number of times to press (default 1). Useful for 'tab three times'."),
+                ],
+                required: ["key"]
+            ),
         ]
         if claudeAvailable {
             t.append(.custom(
@@ -150,6 +161,35 @@ enum ToolBridge {
                 let text = input.string("text") ?? ""
                 _ = dictator.type(text)
                 return AnthropicAgent.ToolResult(content: "Typed \(text.count) chars.")
+
+            case "press_key":
+                let keyArg = (input.string("key") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let modifiers = KeyboardEvents.Modifiers.parse(input.string("modifiers") ?? "")
+                let count = max(1, min(50, Int(input.number("count") ?? 1)))
+                guard !keyArg.isEmpty else {
+                    return AnthropicAgent.ToolResult(
+                        content: "Empty key — provide a name like 'tab' or a letter.",
+                        isError: true
+                    )
+                }
+                if let named = KeyboardEvents.Key(rawValue: keyArg.lowercased()) {
+                    for _ in 0..<count { KeyboardEvents.press(named, modifiers: modifiers) }
+                    return AnthropicAgent.ToolResult(content: "Pressed \(keyArg) ×\(count).")
+                }
+                // Single character (letter or digit)
+                if keyArg.count == 1, let ch = keyArg.first {
+                    var ok = true
+                    for _ in 0..<count {
+                        ok = KeyboardEvents.press(ch, modifiers: modifiers) && ok
+                    }
+                    if ok {
+                        return AnthropicAgent.ToolResult(content: "Pressed \(keyArg) ×\(count).")
+                    }
+                }
+                return AnthropicAgent.ToolResult(
+                    content: "Unknown key '\(keyArg)'. Use a named key or a single letter/digit.",
+                    isError: true
+                )
 
             case "claude_task":
                 guard let claudeRunner else {

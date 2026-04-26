@@ -63,11 +63,18 @@ Routes to whatever app currently holds "now playing" — Spotify, Apple Music, Y
 
 Free-form text into the terminal stays on the dictation path (no Enter key) for safety.
 
-### Dictate into any app
+### Dictate + navigate any app
 
 | You say | What happens |
 |---|---|
 | "master control, type hello world" | "hello world" types into the focused app via synthesized keystrokes |
+| "master control, press tab" | Tab key |
+| "master control, tab three times" | three tabs in a row |
+| "master control, save the file" | Cmd+S (the agent picks the right key combo) |
+| "master control, press escape" / "press enter" | …obvious |
+| "master control, arrow down" / "press up" | arrow keys |
+
+Dictation uses Unicode-string events for typed text; the `press_key` tool uses proper virtual-key codes for Tab/arrows/Cmd-shortcuts so apps see them as real keystrokes (Tab moves focus, Cmd+S saves, etc.). Both use `cghidEventTap` and require **Accessibility** permission for delivery to other apps — first use prompts you, or add `MasterControl.app` in System Settings → Privacy & Security → Accessibility.
 
 ### Ask anything
 
