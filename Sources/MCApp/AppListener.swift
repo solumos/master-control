@@ -32,6 +32,7 @@ actor AppListener {
     private let vad: VoiceActivityDetector
     private let chain: RouterChain
     private let responder: (any Responder)?
+    private let speaker: (any MCCore.Speaker)?
     private let dictator: Dictator
     private let dispatcher: IntentDispatcher
     private let wake: WakeWord
@@ -47,6 +48,7 @@ actor AppListener {
         vad: VoiceActivityDetector,
         chain: RouterChain,
         responder: (any Responder)?,
+        speaker: (any MCCore.Speaker)?,
         dictator: Dictator,
         dispatcher: IntentDispatcher,
         wake: WakeWord,
@@ -56,6 +58,7 @@ actor AppListener {
         self.vad = vad
         self.chain = chain
         self.responder = responder
+        self.speaker = speaker
         self.dictator = dictator
         self.dispatcher = dispatcher
         self.wake = wake
@@ -176,8 +179,8 @@ actor AppListener {
                         )))
                         return
                     }
-                    if !answer.isEmpty {
-                        audio.speak(answer)
+                    if !answer.isEmpty, let speaker {
+                        try? await speaker.speak(answer)
                     }
                     continuation.yield(.activity(.init(
                         timestamp: Date(),

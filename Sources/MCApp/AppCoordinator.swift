@@ -98,6 +98,16 @@ final class AppCoordinator: ObservableObject {
                 NSLog("[MasterControl] ANTHROPIC_API_KEY not set; LLM fallback disabled. Un-classified utterances will be logged but won't get a spoken response.")
             }
 
+            state = .starting(progress: "Kokoro TTS")
+            let kokoro = KokoroSpeaker()
+            var loadedSpeaker: (any MCCore.Speaker)? = nil
+            do {
+                try await kokoro.warmLoad()
+                loadedSpeaker = kokoro
+            } catch {
+                NSLog("[MasterControl] Kokoro TTS failed to load (\(error.localizedDescription)); responses will be logged but not spoken.")
+            }
+
             let chain = RouterChain([DeterministicRouter()])
             let dictator = Dictator()
             let dispatcher = IntentDispatcher()
@@ -109,6 +119,7 @@ final class AppCoordinator: ObservableObject {
                 vad: vad,
                 chain: chain,
                 responder: responder,
+                speaker: loadedSpeaker,
                 dictator: dictator,
                 dispatcher: dispatcher,
                 wake: wake,

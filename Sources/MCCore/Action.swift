@@ -33,6 +33,14 @@ public protocol Responder: Sendable {
     func respond(to prompt: String) async throws -> String
 }
 
+/// Reads text aloud. Implementations may use Apple's AVSpeechSynthesizer,
+/// a local neural model (Kokoro, Coqui), or a cloud TTS API.
+public protocol Speaker: Sendable {
+    var name: String { get }
+    func speak(_ text: String) async throws
+    func stopSpeaking() async
+}
+
 public enum ActionError: Error, LocalizedError, Sendable {
     case unknownTool(String)
     case missingArg(String)

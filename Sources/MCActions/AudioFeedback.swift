@@ -1,16 +1,9 @@
 import AppKit
-@preconcurrency import AVFoundation
 import Foundation
 
-/// Audible UX. Two channels:
-/// - **Chime**: short system sound on successful action execution.
-///   We use macOS system sounds (NSSound) so the cues match the OS's
-///   typical feedback vocabulary instead of feeling app-specific.
-/// - **TTS**: AVSpeechSynthesizer for "thinking" announcements while
-///   the LLM router is running. Useful because the deterministic
-///   path is silent (~150 ms) but the LLM path takes ~1 s — without
-///   audio feedback the user can't tell whether the system is
-///   working or stuck.
+/// Chime cues. Plays short macOS system sounds (NSSound) on
+/// state transitions: wake-phrase heard, action succeeded, action
+/// failed. TTS is handled separately by a `Speaker` (see MCCore).
 public final class AudioFeedback: @unchecked Sendable {
 
     /// macOS bundles ~12 system sounds in /System/Library/Sounds.
@@ -29,56 +22,11 @@ public final class AudioFeedback: @unchecked Sendable {
         }
     }
 
-    private let synth = AVSpeechSynthesizer()
-    private let voice: AVSpeechSynthesisVoice?
-
-    public init(voiceLanguage: String = "en-US") {
-        self.voice = Self.bestAvailableVoice(forLanguage: voiceLanguage)
-    }
-
-    /// Pick the highest-quality voice available for the given language.
-    /// macOS exposes voices at three quality tiers: default → enhanced →
-    /// premium (neural, sounds dramatically more natural). Premium and
-    /// enhanced voices are opt-in downloads via:
-    ///   System Settings → Accessibility → Spoken Content → System Voice
-    /// → "Manage Voices…". Until the user downloads one we fall back to
-    /// the basic default voice.
-    private static func bestAvailableVoice(forLanguage language: String) -> AVSpeechSynthesisVoice? {
-        let prefix = String(language.prefix(2))
-        let voices = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix(prefix) }
-
-        if let premium = voices.first(where: { $0.quality == .premium }) {
-            return premium
-        }
-        if let enhanced = voices.first(where: { $0.quality == .enhanced }) {
-            return enhanced
-        }
-        return AVSpeechSynthesisVoice(language: language)
-    }
+    public init() {}
 
     public func play(_ cue: Cue) {
         // NSSound caches and plays asynchronously off the main thread.
         // Failures (e.g. missing system sound on a future OS) are silent.
         NSSound(named: NSSound.Name(cue.soundName))?.play()
-    }
-
-    /// Speak a short string. Cancels any in-flight utterance so a
-    /// stale "thinking" announcement doesn't talk over the result.
-    public func speak(_ text: String, rate: Float = AVSpeechUtteranceDefaultSpeechRate) {
-        guard !text.isEmpty else { return }
-        if synth.isSpeaking {
-            synth.stopSpeaking(at: .immediate)
-        }
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = voice
-        utterance.rate = rate
-        synth.speak(utterance)
-    }
-
-    public func stopSpeaking() {
-        if synth.isSpeaking {
-            synth.stopSpeaking(at: .immediate)
-        }
     }
 }
