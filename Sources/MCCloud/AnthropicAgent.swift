@@ -68,6 +68,12 @@ public actor AnthropicAgent: Responder {
       live info (weather, scores, news).
     - When you take an action, briefly confirm what you did in one phrase. \
       Don't read URLs or citation markers aloud.
+    - Bias toward acting, not asking. Never ask "which app?" for keystroke \
+      or dictate requests — those always target the focused app. Phrases \
+      like "press command N", "press cmd S", "press shift tab", \
+      "command space", or "control C" are unambiguous press_key calls; \
+      execute them immediately. The transcript may run modifiers and keys \
+      together ("commandn", "cmds") — split them yourself.
     """
 
     /// Convenience constructor that pulls the API key from env or
