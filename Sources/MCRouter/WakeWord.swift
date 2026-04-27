@@ -82,6 +82,10 @@ public struct WakeWord: Sendable {
             remainder = String(norm.dropFirst(hit.count))
         } else if let r = fuzzyTriggerPrefix(norm) {
             remainder = r
+        } else if let r = wakePhraseAnywhere(norm, triggers: sortedTriggers) {
+            remainder = r
+        } else if let r = bareControlPrefix(norm) {
+            remainder = r
         } else {
             return nil
         }
@@ -112,6 +116,53 @@ public struct WakeWord: Sendable {
         }
 
         return Match(kind: .route, payload: remainder)
+    }
+
+    /// Find the last occurrence of any wake phrase inside the utterance
+    /// and return the text after it. Catches two real-world cases the
+    /// start-anchored matchers miss: TTS feedback prepended to the user's
+    /// command (e.g. "Pasted from clipboard. Master Control, press
+    /// Command V."), and false-start chatter that VAD bundles together
+    /// with the directive ("Go say something nice to Roger. Master
+    /// control, press pause."). Latest position wins because the
+    /// freshest wake hit is the user's most recent intent.
+    func wakePhraseAnywhere(_ norm: String, triggers: [String]) -> String? {
+        var bestEnd: String.Index? = nil
+        for phrase in triggers {
+            var searchStart = norm.startIndex
+            while searchStart < norm.endIndex,
+                  let range = norm.range(of: phrase, range: searchStart..<norm.endIndex) {
+                // Require word boundaries on each side so embedded
+                // substrings (e.g. "remastercontrol") don't fire.
+                let leftOK = range.lowerBound == norm.startIndex
+                    || norm[norm.index(before: range.lowerBound)].isWhitespace
+                let rightOK = range.upperBound == norm.endIndex
+                    || norm[range.upperBound].isWhitespace
+                if leftOK && rightOK {
+                    if bestEnd == nil || range.upperBound > bestEnd! {
+                        bestEnd = range.upperBound
+                    }
+                }
+                searchStart = range.upperBound
+            }
+        }
+        guard let end = bestEnd else { return nil }
+        let payload = String(norm[end...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return payload.isEmpty ? nil : payload
+    }
+
+    /// Bare leading "control " followed by at least one more word. Parakeet
+    /// routinely drops the soft initial "master" before audio fully ramps
+    /// in, leaving "control press enter" / "control type X" — which is
+    /// unambiguously a directive in practice. Refusing to match these is
+    /// the single largest source of ignored utterances in the activity log.
+    func bareControlPrefix(_ norm: String) -> String? {
+        let prefix = "control "
+        guard norm.hasPrefix(prefix) else { return nil }
+        let rest = String(norm.dropFirst(prefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return rest.isEmpty ? nil : rest
     }
 
     /// If the utterance starts with 1–2 short tokens followed by a token
