@@ -1,4 +1,6 @@
 @preconcurrency import AVFoundation
+import AudioToolbox
+import CoreAudio
 import Foundation
 import MCCore
 
@@ -21,14 +23,49 @@ public final class AudioCapture: @unchecked Sendable {
     private var sink: Sink?
     private var converter: AVAudioConverter?
     private var converterOutputFormat: AVAudioFormat?
+    private var firstChunkLogged = false
 
     public init() {}
 
     /// Begin streaming. The `sink` is called repeatedly with successive
     /// 16 kHz mono Float32 sample chunks until `stop()` is called.
-    public func start(sink: @escaping Sink) throws {
+    ///
+    /// `inputDeviceUID` selects the hardware input. Pass `nil` to use
+    /// the system default. UIDs are stable across reboots; resolve via
+    /// `AudioDeviceCatalog`.
+    public func start(inputDeviceUID: String? = nil, sink: @escaping Sink) throws {
         let input = engine.inputNode
+
+        // Pin the input to a specific HAL device before pulling the
+        // input format — `inputFormat(forBus:)` reflects whichever
+        // device the input audio unit is currently bound to. Set the
+        // device first so the converter picks up the right sample rate.
+        if let uid = inputDeviceUID, !uid.isEmpty {
+            if let deviceID = AudioDeviceCatalog.deviceID(forUID: uid),
+               let audioUnit = input.audioUnit
+            {
+                var id = deviceID
+                let status = AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global,
+                    0,
+                    &id,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)
+                )
+                let name = AudioDeviceCatalog.displayName(forUID: uid) ?? uid
+                if status == noErr {
+                    NSLog("[AudioCapture] input pinned to \"\(name)\" (uid=\(uid))")
+                } else {
+                    NSLog("[AudioCapture] failed to set input device \"\(name)\": OSStatus=\(status); falling back to system default")
+                }
+            } else {
+                NSLog("[AudioCapture] persisted input UID \(uid) not found among current devices — using system default")
+            }
+        }
+
         let inFormat = input.inputFormat(forBus: 0)
+        NSLog("[AudioCapture] inputFormat: \(inFormat.sampleRate) Hz, \(inFormat.channelCount) ch")
 
         guard let outFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -57,6 +94,7 @@ public final class AudioCapture: @unchecked Sendable {
 
         engine.prepare()
         try engine.start()
+        NSLog("[AudioCapture] engine started; tap installed at \(inFormat.sampleRate) Hz")
     }
 
     /// Stop streaming. Detaches the tap and stops the engine.
@@ -65,6 +103,7 @@ public final class AudioCapture: @unchecked Sendable {
         engine.stop()
         lock.lock()
         sink = nil
+        firstChunkLogged = false
         lock.unlock()
     }
 
@@ -106,6 +145,10 @@ public final class AudioCapture: @unchecked Sendable {
         guard frames > 0 else { return }
 
         let chunk = Array(UnsafeBufferPointer(start: channelData, count: frames))
+        if !firstChunkLogged {
+            firstChunkLogged = true
+            NSLog("[AudioCapture] first audio chunk received (\(frames) frames)")
+        }
         sink(chunk)
     }
 }

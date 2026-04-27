@@ -49,6 +49,11 @@ struct MenuContent: View {
         }
         .keyboardShortcut("p")
 
+        Button("Settings…") {
+            SettingsWindowController.shared.show()
+        }
+        .keyboardShortcut(",")
+
         Button("Quit MasterControl") {
             coordinator.quit()
         }

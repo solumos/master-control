@@ -70,6 +70,11 @@ public struct WakeWord: Sendable {
         /// The portion of the utterance after the wake word (and after
         /// the mode-trigger word, if present), trimmed.
         public let payload: String
+
+        public init(kind: Kind, payload: String) {
+            self.kind = kind
+            self.payload = payload
+        }
     }
 
     /// Try to match the wake word at the start of `utterance`.

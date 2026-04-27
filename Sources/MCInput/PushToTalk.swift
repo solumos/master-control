@@ -16,6 +16,8 @@ public final class PushToTalk: @unchecked Sendable {
 
     public static let rightOptionKeyCode: Int64 = 61
     public static let rightCommandKeyCode: Int64 = 54
+    /// kVK_Function — the Fn / 🌐 key on Apple keyboards.
+    public static let fnKeyCode: Int64 = 63
 
     public let keyCode: Int64
     public let label: String
@@ -110,6 +112,8 @@ public final class PushToTalk: @unchecked Sendable {
             pressed = event.flags.contains(.maskAlternate)
         case Self.rightCommandKeyCode:
             pressed = event.flags.contains(.maskCommand)
+        case Self.fnKeyCode:
+            pressed = event.flags.contains(.maskSecondaryFn)
         default:
             // Generic fallback: presence of any modifier flag indicates press.
             pressed = !event.flags.isEmpty

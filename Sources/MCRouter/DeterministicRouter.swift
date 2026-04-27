@@ -124,6 +124,17 @@ public struct Normalizer: Sendable {
 }
 
 extension Array where Element == DeterministicRouter.Pattern {
+    /// English word forms for 1..20. Used to enumerate "tab five" /
+    /// "tab twelve" alongside the digit forms — STT emits the word
+    /// rather than the digit for short counts.
+    static let numberWords: [Int: String] = [
+        1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+        6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+        11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+        15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
+        19: "nineteen", 20: "twenty",
+    ]
+
     /// Initial seed set for the Phase 0 spike. Phase 1 will move this to
     /// `Resources/intents.json` and ship with ~20 intents.
     public static var seedSet: [DeterministicRouter.Pattern] {
@@ -159,13 +170,20 @@ extension Array where Element == DeterministicRouter.Pattern {
             // Switch to a Chrome tab by 1-based index. Covers the typical
             // "switch to tab 4" / "tab 4" / "go to tab 4" forms that would
             // otherwise fall into openAppFallback and fail with /usr/bin/open.
+            // We seed both digit ("tab 5") and word ("tab five") forms —
+            // STT often emits the word for short counts, and "switch to
+            // tab five" otherwise gets parsed as `open -a "Tab Five"`.
         ] + (1...20).flatMap { n -> [DeterministicRouter.Pattern] in
-            [.chromeSwitchTab(
+            let word = Self.numberWords[n] ?? String(n)
+            return [.chromeSwitchTab(
                 target: String(n),
                 phrases: [
                     "switch to tab \(n)",
                     "go to tab \(n)",
                     "tab \(n)",
+                    "switch to tab \(word)",
+                    "go to tab \(word)",
+                    "tab \(word)",
                 ]
             )]
         } + [
