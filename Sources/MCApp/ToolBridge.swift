@@ -44,9 +44,10 @@ enum ToolBridge {
 
             .custom(
                 name: "chrome",
-                description: "Control the front Chrome window: tab nav and reload/back/forward.",
+                description: "Control the front Chrome window. Tab nav: 'next_tab', 'prev_tab', 'new_tab', 'close_tab'. Page nav: 'reload', 'back', 'forward'. Tab selection: 'list_tabs' returns a numbered list of all tabs (title + URL); 'switch_tab' with `target` activates a tab — `target` is either a 1-based index ('4') or a fuzzy substring matched against tab titles/URLs ('gmail', 'github.com/anthropics'). When the user asks to switch to a tab by topic, call list_tabs first, then switch_tab with the right target.",
                 properties: [
-                    "command": .init(type: "string", description: "One of: 'next_tab', 'prev_tab', 'new_tab', 'close_tab', 'reload', 'back', 'forward'."),
+                    "command": .init(type: "string", description: "One of: 'next_tab', 'prev_tab', 'new_tab', 'close_tab', 'reload', 'back', 'forward', 'switch_tab', 'list_tabs'."),
+                    "target": .init(type: "string", description: "Required for 'switch_tab'. Either a 1-based tab index ('4') or a fuzzy substring of the tab's title or URL."),
                 ],
                 required: ["command"]
             ),
@@ -137,10 +138,17 @@ enum ToolBridge {
 
             case "chrome":
                 let cmd = input.string("command") ?? ""
+                var args: [String: ArgValue] = [
+                    "app": .string("chrome"),
+                    "command": .string(cmd),
+                ]
+                if let target = input.string("target"), !target.isEmpty {
+                    args["target"] = .string(target)
+                }
                 let intent = Intent(
                     intent: .appCommand,
                     tool: "chrome",
-                    args: ["app": .string("chrome"), "command": .string(cmd)],
+                    args: args,
                     confidence: 1.0
                 )
                 let result = await dispatcher.dispatch(intent)
