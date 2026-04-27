@@ -31,7 +31,7 @@ actor AppListener {
     private let stt: ParakeetSTT
     private let vad: VoiceActivityDetector
     private let chain: RouterChain
-    private let responder: (any Responder)?
+    private var responder: (any Responder)?
     private let speaker: (any MCCore.Speaker)?
     private let dictator: Dictator
     private let dispatcher: IntentDispatcher
@@ -42,6 +42,7 @@ actor AppListener {
     private var utteranceSamples: [Float] = []
     private var triggered = false
     private var paused = false
+    private var mode: ListenMode = .wakeWord
 
     init(
         stt: ParakeetSTT,
@@ -69,6 +70,23 @@ actor AppListener {
             cont = continuation
         }
         self.continuation = cont
+    }
+
+    /// Swap the LLM-fallback responder. Used when the user updates the
+    /// Anthropic API key from Settings — the next free-form utterance
+    /// picks up the new agent without an app restart. Pass nil to
+    /// disable the fallback.
+    func setResponder(_ responder: (any Responder)?) {
+        self.responder = responder
+    }
+
+    /// Pick which gating strategy applies to incoming utterances.
+    /// In `wakeWord`, only utterances starting with the wake phrase
+    /// are acted on. In `optionToggle`, every utterance is treated
+    /// as a command (the user is responsible for knowing the mic is
+    /// open — see `AppCoordinator.installToggleHotkey`).
+    func setMode(_ mode: ListenMode) {
+        self.mode = mode
     }
 
     func setPaused(_ value: Bool) {
@@ -129,17 +147,30 @@ actor AppListener {
             return
         }
 
-        guard let match = wake.match(utterance: text) else {
-            continuation.yield(.activity(.init(
-                timestamp: Date(),
-                heard: text,
-                status: .ignored
-            )))
-            return
+        let match: WakeWord.Match
+        switch mode {
+        case .wakeWord:
+            guard let m = wake.match(utterance: text) else {
+                continuation.yield(.activity(.init(
+                    timestamp: Date(),
+                    heard: text,
+                    status: .ignored
+                )))
+                return
+            }
+            match = m
+        case .optionToggle:
+            // No wake gate. The Option-key toggle is what decides
+            // whether the mic is open at all; once an utterance got
+            // through VAD here, we treat the full transcript as a
+            // route command. Dictate / send modes aren't reachable in
+            // this mode — Claude's `dictate` tool covers the same
+            // surface area.
+            match = WakeWord.Match(kind: .route, payload: text)
         }
 
-        // Wake phrase recognized — short tick so the user knows we
-        // heard them, before the (possibly multi-second) action runs.
+        // Short tick so the user knows we heard them, before the
+        // (possibly multi-second) action runs.
         audio.play(.heard)
 
         switch match.kind {

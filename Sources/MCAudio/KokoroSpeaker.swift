@@ -26,10 +26,22 @@ public actor KokoroSpeaker: MCCore.Speaker {
 
     private var manager: ManagerBox?
     private var player: AVAudioPlayer?
+    private var outputDeviceUID: String?
 
     public init() {}
 
     public var isLoaded: Bool { manager != nil }
+
+    /// Pins TTS playback to a specific output device by UID. `nil`
+    /// routes to the system default. Applies to the next `speak()`,
+    /// and updates any in-flight player so a long response can be
+    /// rerouted live.
+    public func setOutputDeviceUID(_ uid: String?) {
+        self.outputDeviceUID = (uid?.isEmpty == false) ? uid : nil
+        // AVAudioPlayer.currentDevice is macOS-only and accepts the
+        // device's HAL UID directly. Setting nil reverts to default.
+        player?.currentDevice = self.outputDeviceUID
+    }
 
     /// Download (if needed) and load the model. Call once at startup.
     /// First call downloads ~200 MB; subsequent calls are 1–3 s on warm
@@ -49,6 +61,7 @@ public actor KokoroSpeaker: MCCore.Speaker {
 
         let audioData = try await manager.inner.synthesize(text: text)
         let p = try AVAudioPlayer(data: audioData)
+        p.currentDevice = outputDeviceUID
         p.prepareToPlay()
         p.play()
         // Hold a strong reference on the actor so the player isn't

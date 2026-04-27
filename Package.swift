@@ -93,6 +93,7 @@ let package = Package(
                 "MCRouter",
                 "MCCloud",
                 "MCActions",
+                "MCInput",
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ]
         ),

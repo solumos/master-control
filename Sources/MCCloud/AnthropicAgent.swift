@@ -76,18 +76,24 @@ public actor AnthropicAgent: Responder {
       together ("commandn", "cmds") — split them yourself.
     """
 
-    /// Convenience constructor that pulls the API key from env or
-    /// `~/Downloads/.env` (mirrors the prior responder). Returns nil if
-    /// the key isn't available so the host can degrade gracefully.
+    /// Convenience constructor. Resolution order, first non-empty wins:
+    ///   1. `apiKeyOverride` — caller-supplied (Keychain via Settings)
+    ///   2. `ANTHROPIC_API_KEY` in the process environment
+    ///   3. `ANTHROPIC_API_KEY` from `~/Downloads/.env`
+    /// Returns nil if no key is available so the host can degrade.
     public static func fromEnvironment(
+        apiKeyOverride: String? = nil,
         modelID: String = "claude-haiku-4-5",
         debug: Bool = false,
         tools: [AnthropicTool],
         executor: @escaping ToolExecutor
     ) -> AnthropicAgent? {
-        let envKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
-        let fileKey = EnvFile.value(for: "ANTHROPIC_API_KEY")
-        let key = (envKey?.isEmpty == false ? envKey : fileKey) ?? ""
+        let candidates: [String?] = [
+            apiKeyOverride,
+            ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"],
+            EnvFile.value(for: "ANTHROPIC_API_KEY"),
+        ]
+        let key = candidates.compactMap { $0 }.first(where: { !$0.isEmpty }) ?? ""
         guard !key.isEmpty else { return nil }
         return AnthropicAgent(
             config: .init(apiKey: key, modelID: modelID, debug: debug),
