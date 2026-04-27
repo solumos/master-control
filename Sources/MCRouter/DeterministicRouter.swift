@@ -156,6 +156,20 @@ extension Array where Element == DeterministicRouter.Pattern {
             .chrome("back",      phrases: ["go back", "navigate back", "browser back"]),
             .chrome("forward",   phrases: ["go forward", "navigate forward", "browser forward"]),
 
+            // Switch to a Chrome tab by 1-based index. Covers the typical
+            // "switch to tab 4" / "tab 4" / "go to tab 4" forms that would
+            // otherwise fall into openAppFallback and fail with /usr/bin/open.
+        ] + (1...20).flatMap { n -> [DeterministicRouter.Pattern] in
+            [.chromeSwitchTab(
+                target: String(n),
+                phrases: [
+                    "switch to tab \(n)",
+                    "go to tab \(n)",
+                    "tab \(n)",
+                ]
+            )]
+        } + [
+
             // Terminal commands (whitelisted — only safe read-only verbs).
             // Free-form input into the terminal stays in the dictate path
             // ("master control, type git status") which doesn't press Enter.
@@ -229,6 +243,26 @@ extension DeterministicRouter.Pattern {
                 args: [
                     "app": .string("chrome"),
                     "command": .string(command),
+                ],
+                confidence: confidence,
+                needsClarification: false
+            )
+        )
+    }
+
+    /// Convenience constructor for Chrome `switch_tab`. `target` is a
+    /// 1-based tab index as a string ("4") or a fuzzy substring matched
+    /// against tab titles/URLs at command time.
+    public static func chromeSwitchTab(target: String, phrases: [String], confidence: Double = 0.98) -> Self {
+        .init(
+            phrases: phrases,
+            intent: .init(
+                intent: .appCommand,
+                tool: "chrome",
+                args: [
+                    "app": .string("chrome"),
+                    "command": .string("switch_tab"),
+                    "target": .string(target),
                 ],
                 confidence: confidence,
                 needsClarification: false

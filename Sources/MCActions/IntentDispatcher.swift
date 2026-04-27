@@ -255,6 +255,15 @@ public actor IntentDispatcher {
         guard let command = args["command"]?.stringValue else {
             return Result(label: "Chrome (missing command)", status: .failed("missing 'command' arg"))
         }
+        // switch_tab + list_tabs need typed return values from AppleScript,
+        // so they go through AppleScriptRunner instead of /usr/bin/osascript.
+        if command == "switch_tab" {
+            let target = args["target"]?.stringValue ?? ""
+            return chromeSwitchTab(target: target)
+        }
+        if command == "list_tabs" {
+            return chromeListTabs()
+        }
         let app = "Google Chrome"
         let (script, label): (String, String) = {
             switch command {
@@ -322,6 +331,139 @@ public actor IntentDispatcher {
             arguments: ["-e", script],
             label: label
         )
+    }
+
+    /// Switch the front Chrome window to a specific tab. `target` is either
+    /// a 1-based index ("4") or a fuzzy substring matched against tab titles
+    /// and URLs ("gmail" → matches "Inbox - …@gmail.com - Gmail").
+    private nonisolated func chromeSwitchTab(target: String) -> Result {
+        let trimmed = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return Result(label: "Chrome: switch tab", status: .failed("missing 'target' arg"))
+        }
+        let tabs: [(index: Int, title: String, url: String)]
+        do {
+            tabs = try chromeFrontTabs()
+        } catch {
+            return Result(label: "Chrome: switch tab", status: .failed(error.localizedDescription))
+        }
+        guard !tabs.isEmpty else {
+            return Result(label: "Chrome: switch tab", status: .failed("no tabs in front window"))
+        }
+        let chosen: Int
+        if let idx = Int(trimmed), idx >= 1 {
+            guard idx <= tabs.count else {
+                return Result(
+                    label: "Chrome: switch to tab \(idx)",
+                    status: .failed("only \(tabs.count) tab(s) open")
+                )
+            }
+            chosen = idx
+        } else if let match = Self.fuzzyTabMatch(query: trimmed, tabs: tabs) {
+            chosen = match
+        } else {
+            return Result(
+                label: "Chrome: switch tab",
+                status: .failed("no tab matching '\(trimmed)'")
+            )
+        }
+        let activate = """
+        tell application "Google Chrome"
+          activate
+          tell front window to set active tab index to \(chosen)
+        end tell
+        """
+        do {
+            try AppleScriptRunner.run(activate)
+            let title = tabs.first(where: { $0.index == chosen })?.title ?? ""
+            return Result(label: "Chrome: tab \(chosen) — \(title)", status: .executed)
+        } catch {
+            return Result(label: "Chrome: switch tab", status: .failed(error.localizedDescription))
+        }
+    }
+
+    /// List all tabs in the front Chrome window. Returns the list as the
+    /// `speak` field so the LLM tool path can show them to Claude.
+    private nonisolated func chromeListTabs() -> Result {
+        let tabs: [(index: Int, title: String, url: String)]
+        do {
+            tabs = try chromeFrontTabs()
+        } catch {
+            return Result(label: "Chrome: list tabs", status: .failed(error.localizedDescription))
+        }
+        guard !tabs.isEmpty else {
+            return Result(label: "Chrome: list tabs", status: .executed, speak: "No Chrome tabs open.")
+        }
+        let body = tabs
+            .map { "\($0.index). \($0.title) — \($0.url)" }
+            .joined(separator: "\n")
+        return Result(label: "Chrome: \(tabs.count) tab(s)", status: .executed, speak: body)
+    }
+
+    /// Read the title + URL of every tab in Chrome's front window. Uses a
+    /// unit-separator (\\u{1F}) between fields and record-separator (\\u{1E})
+    /// between tabs so titles containing newlines parse cleanly.
+    private nonisolated func chromeFrontTabs() throws -> [(index: Int, title: String, url: String)] {
+        let script = """
+        if application "Google Chrome" is not running then return ""
+        tell application "Google Chrome"
+          if (count of windows) = 0 then return ""
+          set out to ""
+          tell front window
+            set N to count of tabs
+            repeat with i from 1 to N
+              set t to tab i
+              try
+                set tt to title of t
+              on error
+                set tt to ""
+              end try
+              try
+                set tu to URL of t
+              on error
+                set tu to ""
+              end try
+              if i > 1 then set out to out & (ASCII character 30)
+              set out to out & tt & (ASCII character 31) & tu
+            end repeat
+          end tell
+          return out
+        end tell
+        """
+        let raw = try AppleScriptRunner.run(script).string ?? ""
+        if raw.isEmpty { return [] }
+        return raw.components(separatedBy: "\u{1E}").enumerated().compactMap { (i, rec) in
+            let parts = rec.components(separatedBy: "\u{1F}")
+            let title = parts.first ?? ""
+            let url = parts.count > 1 ? parts[1] : ""
+            return (index: i + 1, title: title, url: url)
+        }
+    }
+
+    /// Fuzzy-match a query against tab titles/URLs. Priority:
+    ///   1. case-insensitive substring of title
+    ///   2. case-insensitive substring of URL host/path
+    ///   3. word-prefix match on title
+    /// Returns the 1-based tab index, or nil if nothing's close enough.
+    static func fuzzyTabMatch(
+        query: String,
+        tabs: [(index: Int, title: String, url: String)]
+    ) -> Int? {
+        let q = query.lowercased()
+        guard !q.isEmpty else { return nil }
+        if let hit = tabs.first(where: { $0.title.lowercased().contains(q) }) {
+            return hit.index
+        }
+        if let hit = tabs.first(where: { $0.url.lowercased().contains(q) }) {
+            return hit.index
+        }
+        for tab in tabs {
+            let words = tab.title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            if words.contains(where: { $0.hasPrefix(q) || q.hasPrefix($0) && $0.count >= 3 }) {
+                return tab.index
+            }
+        }
+        return nil
     }
 
     /// Terminal AppleScript bindings. Only runs whitelisted commands —
