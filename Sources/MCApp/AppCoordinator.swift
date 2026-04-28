@@ -209,15 +209,16 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    /// Tap right Option (⌥) to toggle pause. Requires Input Monitoring
-    /// permission. Right Option is chosen over left because most
-    /// Option-shortcut keystrokes (Option-letter for special chars)
-    /// use left Option, so right Option is rarely held in normal use.
+    /// Tap Fn (🌐) to toggle pause. Requires Input Monitoring permission.
+    /// Fn is preferred over Option because either Option key produces
+    /// special characters when held with letters, so users who tap left
+    /// vs right inconsistently get a confusing experience. Fn has no
+    /// such overload.
     private func installToggleHotkey() {
         guard toggleHotkey == nil else { return }
         let toggle = PushToTalk(
-            keyCode: PushToTalk.rightOptionKeyCode,
-            label: "option-toggle",
+            keyCode: PushToTalk.fnKeyCode,
+            label: "fn-toggle",
             onPress: { [weak self] in
                 Task { @MainActor [weak self] in
                     self?.togglePause()
@@ -227,9 +228,9 @@ final class AppCoordinator: ObservableObject {
         )
         if toggle.install() {
             self.toggleHotkey = toggle
-            NSLog("[MasterControl] right-Option toggle installed (tap ⌥ to pause/resume)")
+            NSLog("[MasterControl] Fn toggle installed (tap 🌐 to pause/resume)")
         } else {
-            NSLog("[MasterControl] right-Option toggle disabled — grant Input Monitoring in System Settings")
+            NSLog("[MasterControl] Fn toggle disabled — grant Input Monitoring in System Settings")
         }
     }
 
