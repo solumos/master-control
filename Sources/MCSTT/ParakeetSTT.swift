@@ -16,7 +16,18 @@ public actor ParakeetSTT {
     public func warmLoad() async throws {
         guard asr == nil else { return }
         let manager = AsrManager(config: .default)
-        let models = try await AsrModels.downloadAndLoad(version: .v2)
+        let models: AsrModels
+        if let root = ModelsLocation.bundledRoot() {
+            // Pre-installed by the .pkg — skip the network round-trip
+            // entirely. AsrModels.load expects the leaf model directory,
+            // not the parent.
+            let dir = root
+                .appendingPathComponent("Models", isDirectory: true)
+                .appendingPathComponent("parakeet-tdt-0.6b-v2", isDirectory: true)
+            models = try await AsrModels.load(from: dir, version: .v2)
+        } else {
+            models = try await AsrModels.downloadAndLoad(version: .v2)
+        }
         try await manager.loadModels(models)
         self.asr = manager
     }

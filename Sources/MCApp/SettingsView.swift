@@ -51,7 +51,7 @@ struct SettingsView: View {
         case .wakeWord:
             return "Mic is always on. Anything starting with \u{201C}master control, …\u{201D} is acted on; everything else is ignored."
         case .optionToggle:
-            return "Mic is closed by default. Tap right Option (\u{2325}) to start listening; tap again to stop. Requires Input Monitoring permission (System Settings → Privacy & Security → Input Monitoring → MasterControl)."
+            return "Mic is closed by default. Tap Fn (\u{1F310}) to start listening; tap again to stop. Requires Input Monitoring permission (System Settings → Privacy & Security → Input Monitoring → MasterControl). If Fn doesn't respond, set System Settings → Keyboard → \u{201C}Press \u{1F310} key to\u{201D} to \u{201C}Do Nothing\u{201D} so macOS stops intercepting it."
         }
     }
 

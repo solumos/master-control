@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "MCActions", targets: ["MCActions"]),
         .executable(name: "mc-spike", targets: ["MCSpike"]),
         .executable(name: "MasterControl", targets: ["MCApp"]),
+        .executable(name: "FetchModels", targets: ["FetchModels"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.4"),
@@ -94,6 +95,12 @@ let package = Package(
                 "MCCloud",
                 "MCActions",
                 "MCInput",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ]
+        ),
+        .executableTarget(
+            name: "FetchModels",
+            dependencies: [
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ]
         ),
