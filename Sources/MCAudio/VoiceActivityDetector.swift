@@ -23,7 +23,14 @@ public actor VoiceActivityDetector {
 
     public func warmLoad() async throws {
         guard manager == nil else { return }
-        let m = try await VadManager(config: .default)
+        let m: VadManager
+        if let root = ModelsLocation.bundledRoot() {
+            // VadManager appends "Models/silero-vad" to the directory it's
+            // given, so pass the install root verbatim.
+            m = try await VadManager(config: .default, modelDirectory: root)
+        } else {
+            m = try await VadManager(config: .default)
+        }
         self.manager = m
         self.state = await m.makeStreamState()
     }

@@ -48,7 +48,14 @@ public actor KokoroSpeaker: MCCore.Speaker {
     /// storage.
     public func warmLoad() async throws {
         guard manager == nil else { return }
-        let m = KokoroTtsManager()
+        let m: KokoroTtsManager
+        if let root = ModelsLocation.bundledRoot() {
+            // KokoroTtsManager appends "Models/kokoro" to the directory
+            // it's given, matching the install layout.
+            m = KokoroTtsManager(directory: root)
+        } else {
+            m = KokoroTtsManager()
+        }
         try await m.initialize(preloadVoices: nil)
         self.manager = ManagerBox(inner: m)
     }
